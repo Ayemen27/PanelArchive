@@ -1,0 +1,181 @@
+# ==============================================================================
+# Docker Compose Configuration for aaPanel - Production VPS Deployment
+# ==============================================================================
+# This file uses pre-built images from GitHub Container Registry
+# For use in VPS deployment via CI/CD
+#
+# Usage:
+#   docker-compose -f docker-compose.prod.yml up -d
+# ==============================================================================
+
+version: '3.8'
+
+# ==============================================================================
+# Services
+# ==============================================================================
+services:
+  
+  # ============================================================================
+  # Main Application Service
+  # ============================================================================
+  app:
+    # استخدام الصورة المبنية من ghcr.io
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME}:${IMAGE_TAG:-latest}
+    container_name: aapanel_app
+    
+    # Port mapping
+    ports:
+      - "5000:5000"
+    
+    # Environment file
+    env_file:
+      - .env
+    
+    # Dependencies
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    
+    # Volumes
+    volumes:
+      # Persistent application data
+      - app_data:/app/data
+      - app_logs:/app/logs
+      # Production configs (optional)
+      - ./config:/app/config:ro
+    
+    # Network
+    networks:
+      - aapanel_network
+    
+    # Restart policy
+    restart: always
+    
+    # Health check
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || curl -f http://localhost:5000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+  
+  # ============================================================================
+  # PostgreSQL Database Service
+  # ============================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: aapanel_postgres
+    
+    # Environment file
+    env_file:
+      - .env
+    
+    # Volumes
+    volumes:
+      # Persistent PostgreSQL data
+      - postgres_data:/var/lib/postgresql/data
+    
+    # Network
+    networks:
+      - aapanel_network
+    
+    # Restart policy
+    restart: always
+    
+    # Health check
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-aapanel_user} -d $${POSTGRES_DB:-production_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+  
+  # ============================================================================
+  # Redis Caching Service
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: aapanel_redis
+    
+    # Additional commands
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    
+    # Volumes
+    volumes:
+      # Persistent Redis data
+      - redis_data:/data
+    
+    # Network
+    networks:
+      - aapanel_network
+    
+    # Restart policy
+    restart: always
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+# ==============================================================================
+# Persistent Volumes
+# ==============================================================================
+volumes:
+  # PostgreSQL data
+  postgres_data:
+    driver: local
+    name: aapanel_postgres_data
+  
+  # Redis data
+  redis_data:
+    driver: local
+    name: aapanel_redis_data
+  
+  # Application data
+  app_data:
+    driver: local
+    name: aapanel_app_data
+  
+  # Application logs
+  app_logs:
+    driver: local
+    name: aapanel_app_logs
+
+# ==============================================================================
+# Networks
+# ==============================================================================
+networks:
+  aapanel_network:
+    driver: bridge
+    name: aapanel_network
+
+# ==============================================================================
+# Important Notes
+# ==============================================================================
+#
+# 1. Image Source:
+#    - Uses pre-built image from ghcr.io
+#    - Image is pulled during deployment
+#    - No build context needed on VPS
+#
+# 2. Environment Variables:
+#    - REGISTRY: Docker registry (default: ghcr.io)
+#    - IMAGE_NAME: Full image name (e.g., owner/repo)
+#    - IMAGE_TAG: Image tag (default: latest)
+#
+# 3. Required Files on VPS:
+#    - docker-compose.prod.yml (this file)
+#    - .env (environment variables)
+#    - config/ (optional configurations)
+#
+# ==============================================================================

@@ -1,0 +1,187 @@
+# ==================== GitHub Actions: Auto Deploy to VPS ====================
+# نشر تلقائي آمن إلى VPS مع health checks و rollback
+
+name: Deploy to VPS
+
+on:
+  workflow_run:
+    workflows: ["Build & Push Docker Image"]
+    types:
+      - completed
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  DEPLOY_PATH: /opt/aapanel
+
+jobs:
+  deploy:
+    name: Deploy to ${{ github.event.inputs.environment || 'production' }}
+    runs-on: ubuntu-latest
+    # فقط إذا كان build ناجح (للـ workflow_run trigger)
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    
+    environment: 
+      name: ${{ github.event.inputs.environment || 'production' }}
+      url: https://${{ secrets.VPS_DOMAIN }}
+    
+    steps:
+      # ==================== الخطوة 1: Checkout الكود ====================
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ==================== الخطوة 2: تجهيز SSH Key ====================
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      # ==================== الخطوة 3: حفظ التكوين الحالي ====================
+      - name: Backup current configuration
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+          cd ${{ env.DEPLOY_PATH }}
+          
+          # حفظ docker-compose.yml الحالي قبل الاستبدال
+          if [ -f docker-compose.yml ]; then
+            cp docker-compose.yml docker-compose.prev.yml
+            echo "✅ Backed up current docker-compose.yml to docker-compose.prev.yml"
+          else
+            echo "ℹ️  No existing docker-compose.yml to backup (first deployment)"
+          fi
+          ENDSSH
+      
+      # ==================== الخطوة 4: نسخ ملفات النشر ====================
+      - name: Copy deployment files to VPS
+        run: |
+          scp -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            docker-compose.prod.yml \
+            .env.example \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ env.DEPLOY_PATH }}/
+          
+          # استبدال بالملف الجديد
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "cd ${{ env.DEPLOY_PATH }} && mv docker-compose.prod.yml docker-compose.yml && echo '✅ Deployed new docker-compose.yml'"
+
+      # ==================== الخطوة 5: نسخ سكريبت النشر ====================
+      - name: Copy deploy script
+        run: |
+          scp -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            deploy.sh \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ env.DEPLOY_PATH }}/
+          
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "chmod +x ${{ env.DEPLOY_PATH }}/deploy.sh"
+
+      # ==================== الخطوة 6: تنفيذ النشر ====================
+      - name: Execute deployment
+        id: deploy
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+          
+          # الانتقال لمجلد النشر
+          cd ${{ env.DEPLOY_PATH }}
+          
+          # تصدير المتغيرات
+          export REGISTRY=${{ env.REGISTRY }}
+          export IMAGE_NAME=${{ env.IMAGE_NAME }}
+          export IMAGE_TAG=latest
+          
+          # تشغيل سكريبت النشر
+          ./deploy.sh
+          
+          ENDSSH
+
+      # ==================== الخطوة 7: Health Check ====================
+      - name: Health check
+        run: |
+          echo "Waiting for application to start..."
+          sleep 15
+          
+          # فحص الصحة
+          MAX_RETRIES=10
+          RETRY_COUNT=0
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if curl -f -s https://${{ secrets.VPS_DOMAIN }}/health > /dev/null 2>&1 || \
+               curl -f -s https://${{ secrets.VPS_DOMAIN }}/ > /dev/null 2>&1; then
+              echo "✅ Health check passed!"
+              exit 0
+            fi
+            
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            echo "Health check attempt $RETRY_COUNT/$MAX_RETRIES failed, retrying..."
+            sleep 5
+          done
+          
+          echo "❌ Health check failed after $MAX_RETRIES attempts"
+          exit 1
+
+      # ==================== الخطوة 8: Rollback عند الفشل ====================
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "⚠️  Deployment failed, initiating rollback..."
+          
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+          
+          cd ${{ env.DEPLOY_PATH }}
+          
+          # التراجع للإصدار السابق
+          if [ -f docker-compose.prev.yml ]; then
+            echo "Rolling back to previous version..."
+            cp docker-compose.prev.yml docker-compose.yml
+            
+            # إعادة تشغيل باستخدام التكوين السابق
+            docker-compose up -d --force-recreate
+            echo "✅ Rollback completed - restored previous configuration"
+          else
+            echo "⚠️  No previous version found for rollback"
+            echo "Attempting to restart current version..."
+            docker-compose restart
+          fi
+          
+          ENDSSH
+
+      # ==================== الخطوة 9: إشعار بالنجاح ====================
+      - name: Deployment success notification
+        if: success()
+        run: |
+          echo "### 🚀 Deployment Successful! ###"
+          echo ""
+          echo "**Environment:** ${{ github.event.inputs.environment || 'production' }}"
+          echo "**Image:** ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          echo "**URL:** https://${{ secrets.VPS_DOMAIN }}"
+          echo ""
+          echo "✅ Application is now live!"
+
+      # ==================== الخطوة 9: تنظيف ====================
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f ~/.ssh/deploy_key
