@@ -125,9 +125,10 @@ else
 fi
 
 # ================================================================
-# Setup SSL Certificate (if requested)
+# Store SSL email for later use
 # ================================================================
 
+SSL_REQUESTED="no"
 if [ "$SETUP_SSL" = "y" ] || [ "$SETUP_SSL" = "yes" ]; then
     print_info "إعداد شهادة SSL..."
     
@@ -140,32 +141,9 @@ if [ "$SETUP_SSL" = "y" ] || [ "$SETUP_SSL" = "yes" ]; then
         exit 1
     fi
     
-    # Create directory for ACME challenge
-    mkdir -p /var/www/certbot
-    
-    # Get SSL certificate
-    print_info "الحصول على شهادة SSL من Let's Encrypt..."
-    certbot certonly --webroot -w /var/www/certbot \
-        -d "$DOMAIN" -d "www.$DOMAIN" \
-        --email "$SSL_EMAIL" \
-        --agree-tos \
-        --non-interactive \
-        --quiet || {
-        print_warning "فشل الحصول على شهادة SSL تلقائياً"
-        print_info "يمكنك إعداد SSL يدوياً لاحقاً"
-        USE_SSL="no"
-    }
-    
-    if [ "$USE_SSL" != "no" ]; then
-        SSL_CERT="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
-        SSL_KEY="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
-        print_success "تم الحصول على شهادة SSL"
-        
-        # Setup auto-renewal
-        print_info "إعداد التجديد التلقائي للشهادة..."
-        (crontab -l 2>/dev/null; echo "0 0,12 * * * certbot renew --quiet --post-hook 'systemctl reload nginx'") | crontab -
-        print_success "تم إعداد التجديد التلقائي"
-    fi
+    SSL_REQUESTED="yes"
+    USE_SSL="no"  # Start with HTTP-only config
+    print_info "سيتم نشر تهيئة HTTP أولاً، ثم الحصول على SSL، ثم تحديث التهيئة..."
 else
     print_info "تخطي إعداد SSL"
     USE_SSL="no"
@@ -177,27 +155,34 @@ fi
 
 print_info "إنشاء تهيئة nginx..."
 
-# Check if template exists
-if [ ! -f "nginx.conf.template" ]; then
-    print_error "nginx.conf.template غير موجود"
-    exit 1
+# Choose appropriate template based on SSL setting
+if [ "$USE_SSL" = "no" ]; then
+    # Use HTTP-only template for initial setup
+    if [ ! -f "nginx_http_only.conf.template" ]; then
+        print_error "nginx_http_only.conf.template غير موجود"
+        exit 1
+    fi
+    TEMPLATE_FILE="nginx_http_only.conf.template"
+    print_info "استخدام تهيئة HTTP فقط..."
+else
+    # Use full template with HTTPS
+    if [ ! -f "nginx.conf.template" ]; then
+        print_error "nginx.conf.template غير موجود"
+        exit 1
+    fi
+    TEMPLATE_FILE="nginx.conf.template"
+    print_info "استخدام تهيئة HTTPS كاملة..."
 fi
 
 # Create temporary config file
 TEMP_CONFIG="/tmp/aapanel_nginx.conf"
-cp nginx.conf.template "$TEMP_CONFIG"
+cp "$TEMPLATE_FILE" "$TEMP_CONFIG"
 
 # Replace variables in template
 sed -i "s/\${DOMAIN}/$DOMAIN/g" "$TEMP_CONFIG"
 sed -i "s/\${APP_PORT}/$APP_PORT/g" "$TEMP_CONFIG"
 sed -i "s|\${SSL_CERT}|$SSL_CERT|g" "$TEMP_CONFIG"
 sed -i "s|\${SSL_KEY}|$SSL_KEY|g" "$TEMP_CONFIG"
-
-# If no SSL, remove HTTPS server block
-if [ "$USE_SSL" = "no" ]; then
-    print_warning "تعطيل HTTPS (لا توجد شهادة SSL)"
-    # This is a simple approach - in production, you might want a separate template
-fi
 
 # ================================================================
 # Create Required Directories
@@ -207,6 +192,7 @@ print_info "إنشاء المجلدات المطلوبة..."
 
 mkdir -p /var/www/aapanel
 mkdir -p /var/www/aapanel/errors
+mkdir -p /var/www/certbot
 mkdir -p /var/log/nginx
 
 # Create simple error pages
@@ -305,6 +291,87 @@ else
     print_error "خطأ في تهيئة nginx"
     print_info "راجع السجلات: sudo nginx -t"
     exit 1
+fi
+
+# ================================================================
+# Setup SSL with Certbot (after nginx is configured with HTTP-only)
+# ================================================================
+
+if [ "$SSL_REQUESTED" = "yes" ]; then
+    echo ""
+    print_info "════════════════════════════════════════"
+    print_info "  المرحلة 2: الحصول على شهادة SSL"
+    print_info "════════════════════════════════════════"
+    echo ""
+    
+    # nginx is now serving HTTP and can handle ACME challenge
+    print_info "الحصول على شهادة SSL من Let's Encrypt..."
+    print_info "(قد يستغرق بضع دقائق...)"
+    
+    # Use certbot certonly with webroot (nginx already serves the path)
+    certbot certonly --webroot -w /var/www/certbot \
+        -d "$DOMAIN" -d "www.$DOMAIN" \
+        --email "$SSL_EMAIL" \
+        --agree-tos \
+        --non-interactive || {
+        print_error "فشل الحصول على شهادة SSL"
+        print_info "تأكد من:"
+        print_info "  1. DNS للنطاق يشير إلى هذا الخادم"
+        print_info "  2. المنافذ 80 و 443 مفتوحة في firewall"
+        print_info "  3. nginx يعمل بشكل صحيح"
+        echo ""
+        print_info "يمكنك محاولة الحصول على الشهادة يدوياً عبر:"
+        print_info "  sudo certbot certonly --webroot -w /var/www/certbot -d $DOMAIN"
+        echo ""
+        print_warning "سيبقى الموقع يعمل على HTTP فقط"
+        print_success "انتهى الإعداد (بدون SSL)"
+        exit 0
+    }
+    
+    print_success "تم الحصول على شهادة SSL بنجاح!"
+    
+    # Now re-create configuration with SSL enabled
+    print_info "تحديث التهيئة لتفعيل HTTPS..."
+    
+    SSL_CERT="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
+    SSL_KEY="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
+    USE_SSL="yes"
+    
+    # Re-create config with SSL
+    TEMP_CONFIG="/tmp/aapanel_nginx_ssl.conf"
+    cp nginx.conf.template "$TEMP_CONFIG"
+    
+    # Replace variables
+    sed -i "s/\${DOMAIN}/$DOMAIN/g" "$TEMP_CONFIG"
+    sed -i "s/\${APP_PORT}/$APP_PORT/g" "$TEMP_CONFIG"
+    sed -i "s|\${SSL_CERT}|$SSL_CERT|g" "$TEMP_CONFIG"
+    sed -i "s|\${SSL_KEY}|$SSL_KEY|g" "$TEMP_CONFIG"
+    
+    # Install new config with SSL
+    cp "$TEMP_CONFIG" "$NGINX_SITE"
+    
+    # Test new config
+    print_info "اختبار التهيئة الجديدة..."
+    if nginx -t; then
+        print_success "التهيئة صحيحة ✓"
+        
+        # Reload nginx
+        print_info "إعادة تحميل nginx لتفعيل HTTPS..."
+        systemctl reload nginx
+        print_success "تم تفعيل HTTPS بنجاح!"
+        
+        # Setup auto-renewal
+        print_info "إعداد التجديد التلقائي للشهادة..."
+        (crontab -l 2>/dev/null; echo "0 0,12 * * * certbot renew --quiet --post-hook 'systemctl reload nginx'") | crontab -
+        print_success "تم إعداد التجديد التلقائي"
+    else
+        print_error "خطأ في التهيئة الجديدة"
+        print_warning "الموقع لا يزال يعمل على HTTP"
+        exit 1
+    fi
+    
+    # Clean up
+    rm -f "$TEMP_CONFIG"
 fi
 
 # ================================================================

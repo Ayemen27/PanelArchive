@@ -1,0 +1,55 @@
+# ================================================================
+# nginx HTTP-Only Configuration Template for aaPanel
+# ================================================================
+# هذا الملف يُستخدم للمرحلة الأولى من الإعداد (قبل الحصول على SSL)
+# ================================================================
+
+# Upstream definition
+upstream aapanel_app {
+    server 127.0.0.1:${APP_PORT} fail_timeout=0;
+    keepalive 32;
+}
+
+# ================================================================
+# HTTP Server Block - يخدم التطبيق ويسمح بـ ACME challenge
+# ================================================================
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN} www.${DOMAIN};
+    
+    # Root directory
+    root /var/www/aapanel;
+    
+    # Logging
+    access_log /var/log/nginx/aapanel_access.log;
+    error_log /var/log/nginx/aapanel_error.log warn;
+    
+    # ACME challenge for Let's Encrypt (important!)
+    location ^~ /.well-known/acme-challenge/ {
+        default_type "text/plain";
+        root /var/www/certbot;
+        allow all;
+    }
+    
+    # Client settings
+    client_max_body_size 100M;
+    
+    # Main application
+    location / {
+        try_files $uri @proxy_to_app;
+    }
+    
+    # Proxy to application
+    location @proxy_to_app {
+        include proxy_params;
+        proxy_pass http://aapanel_app;
+    }
+    
+    # Health check
+    location /health {
+        access_log off;
+        include proxy_params;
+        proxy_pass http://aapanel_app;
+    }
+}

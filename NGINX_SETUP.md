@@ -47,7 +47,7 @@
 #### 1. تحميل الملفات إلى VPS
 ```bash
 # نسخ الملفات إلى الخادم
-scp nginx.conf.template proxy_params setup_nginx.sh user@your-vps:/home/user/aapanel/
+scp nginx.conf.template nginx_http_only.conf.template proxy_params setup_nginx.sh user@your-vps:/home/user/aapanel/
 ```
 
 #### 2. تشغيل السكريبت
@@ -62,11 +62,27 @@ sudo ./setup_nginx.sh
 - البريد الإلكتروني لـ Let's Encrypt
 - تأكيد إعداد SSL
 
-#### 4. انتهى! ✅
+#### 4. مراحل الإعداد ⚡
+
+**⚠️ مهم:** إذا طلبت SSL، سيعمل السكريبت على مرحلتين:
+
+**المرحلة 1 - HTTP فقط:**
+- نشر تهيئة HTTP بسيطة (بدون HTTPS)
+- الموقع سيعمل مؤقتاً على `http://` فقط
+- هذا ضروري حتى يتمكن Let's Encrypt من التحقق من النطاق
+
+**المرحلة 2 - تفعيل HTTPS:**
+- الحصول على شهادة SSL من Let's Encrypt
+- تحديث التهيئة لتفعيل HTTPS
+- إعادة توجيه تلقائي من HTTP إلى HTTPS
+
+**المدة الإجمالية:** 2-3 دقائق
+
+#### 5. انتهى! ✅
 السكريبت سيقوم بـ:
 - تثبيت nginx و certbot
-- الحصول على شهادة SSL
-- إعداد التهيئة
+- نشر HTTP → الحصول على SSL → تفعيل HTTPS
+- إعداد التجديد التلقائي للشهادة
 - اختبار وتشغيل nginx
 
 ---
