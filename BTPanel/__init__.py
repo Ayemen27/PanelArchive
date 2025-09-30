@@ -26,8 +26,11 @@ import uuid
 import psutil
 import zipfile
 
-panel_path = '/www/server/panel'
+# Use dynamic panel path instead of hardcoded /www/server/panel
+panel_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if not os.name in ['nt']:
+    if os.path.exists('/www/server/panel'):
+        panel_path = '/www/server/panel'
     os.chdir(panel_path)
 if not 'class/' in sys.path:
     sys.path.insert(0, 'class/')

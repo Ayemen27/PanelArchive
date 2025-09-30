@@ -116,9 +116,20 @@ if os.path.exists(path):
 
 
 
-es = gettext.translation('en', localedir='/www/server/panel/BTPanel/static/language/gettext', languages=['en'])
-es.install()
-_ = es.gettext
+# Use dynamic path for translation files
+_panel_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_localedir = os.path.join(_panel_path, 'BTPanel', 'static', 'language', 'gettext')
+if not os.path.exists(_localedir):
+    _localedir = '/www/server/panel/BTPanel/static/language/gettext'
+
+try:
+    es = gettext.translation('en', localedir=_localedir, languages=['en'])
+    es.install()
+    _ = es.gettext
+except:
+    # Fallback if translation files not found
+    import builtins
+    builtins.__dict__['_'] = lambda x: x
 
 
 
@@ -7132,17 +7143,17 @@ ufw reload
         ExecShell("{} install -y firewalld".format(install_bin))
         if get_firewall_status() != -1:
             _cmd = '''systemctl enable firewalld
-			systemctl start firewalld
-			firewall-cmd --set-default-zone=public > /dev/null 2>&1
-			firewall-cmd --permanent --zone=public --add-port=20/tcp > /dev/null 2>&1
-			firewall-cmd --permanent --zone=public --add-port=21/tcp > /dev/null 2>&1
-			firewall-cmd --permanent --zone=public --add-port=22/tcp > /dev/null 2>&1
-			firewall-cmd --permanent --zone=public --add-port=80/tcp > /dev/null 2>&1
+                        systemctl start firewalld
+                        firewall-cmd --set-default-zone=public > /dev/null 2>&1
+                        firewall-cmd --permanent --zone=public --add-port=20/tcp > /dev/null 2>&1
+                        firewall-cmd --permanent --zone=public --add-port=21/tcp > /dev/null 2>&1
+                        firewall-cmd --permanent --zone=public --add-port=22/tcp > /dev/null 2>&1
+                        firewall-cmd --permanent --zone=public --add-port=80/tcp > /dev/null 2>&1
             firewall-cmd --permanent --zone=public --add-port=443/tcp > /dev/null 2>&1
-			firewall-cmd --permanent --zone=public --add-port={panelPort}/tcp > /dev/null 2>&1
-			firewall-cmd --permanent --zone=public --add-port={sshPort}/tcp > /dev/null 2>&1
-			firewall-cmd --permanent --zone=public --add-port=39000-40000/tcp > /dev/null 2>&1
-			firewall-cmd --reload
+                        firewall-cmd --permanent --zone=public --add-port={panelPort}/tcp > /dev/null 2>&1
+                        firewall-cmd --permanent --zone=public --add-port={sshPort}/tcp > /dev/null 2>&1
+                        firewall-cmd --permanent --zone=public --add-port=39000-40000/tcp > /dev/null 2>&1
+                        firewall-cmd --reload
 '''.format(panelPort=get_panel_port(), sshPort=get_ssh_port())
             ExecShell(_cmd)
 

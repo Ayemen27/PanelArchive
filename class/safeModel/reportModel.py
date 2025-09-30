@@ -13,7 +13,11 @@ import sys
 
 from safeModel.base import safeBase
 
-os.chdir("/www/server/panel")
+# Use dynamic path instead of hardcoded /www/server/panel
+_panel_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if os.path.exists("/www/server/panel"):
+    _panel_path = "/www/server/panel"
+os.chdir(_panel_path)
 sys.path.append("class/")
 import public, config, datetime
 
