@@ -1,0 +1,106 @@
+# مجلد البيانات الحساسة (خطر تسريب أسرار)
+data/
+data/**
+logs/**
+
+# ملفات Git والإصدارات
+.git/
+.github/
+.gitignore
+.gitattributes
+
+# ملفات Python المترجمة
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# بيئات Python الافتراضية
+.venv/
+venv/
+ENV/
+env/
+.virtualenv/
+pyenv/
+
+# ملفات IDE والمحررات
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ملفات السجلات
+*.log
+logs/
+*.out
+*.err
+
+# ملفات البيئة الحساسة (نبقي .env.example فقط)
+.env
+.env.local
+.env.*.local
+
+# ملفات التوثيق
+*.md
+README*
+CHANGELOG*
+LICENSE*
+CONTRIBUTING*
+docs/
+
+# ملفات الاختبار
+tests/
+test/
+*.test.py
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Node.js (إن وجد)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# ملفات البناء المؤقتة
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+
+# ملفات النسخ الاحتياطي
+*.bak
+*.backup
+*.old
+*.orig
+*.save
+data/db_backups/
+
+# ملفات Docker والـ CI/CD
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+.travis.yml
+.gitlab-ci.yml
+Jenkinsfile
+
+# ملفات النظام المؤقتة
+*.tmp
+*.temp
+.cache/
+tmp/
+
+# ملفات الجلسات المؤقتة (سيتم إنشاؤها في الحاوية)
+data/session/
+data/sess_files/
+class/flask_session/
+
+# ملفات الـ static المترجمة (إن كانت تُبنى)
+*.map
