@@ -1,0 +1,70 @@
+[Unit]
+Description=aaPanel - Server Management Control Panel
+Documentation=https://www.aapanel.com/
+After=network.target postgresql.service mysql.service redis.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www
+Group=www
+WorkingDirectory=/www/server/panel
+
+# Environment variables
+EnvironmentFile=/www/server/panel/.env
+Environment="PYTHONUNBUFFERED=1"
+Environment="ENVIRONMENT=production"
+
+# Gunicorn command with config factory support (via virtualenv)
+# الخيار 1: استخدام gunicorn_config.py (موصى به)
+ExecStart=/www/server/panel/venv/bin/gunicorn -c gunicorn_config.py BTPanel:app
+
+# الخيار 2: أوامر مباشرة (للتخصيص اليدوي)
+# ExecStart=/www/server/panel/venv/bin/gunicorn \
+#     --bind 0.0.0.0:${PORT:-8888} \
+#     --workers ${WORKERS:-4} \
+#     --threads ${THREADS:-3} \
+#     --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker \
+#     --timeout 7200 \
+#     --keepalive 60 \
+#     --max-requests 1000 \
+#     --max-requests-jitter 50 \
+#     --graceful-timeout 30 \
+#     --access-logfile /www/server/panel/logs/access.log \
+#     --error-logfile /www/server/panel/logs/error.log \
+#     --log-level info \
+#     --pid /www/server/panel/logs/panel.pid \
+#     --capture-output \
+#     --enable-stdio-inheritance \
+#     BTPanel:app
+
+# Restart policy
+Restart=always
+RestartSec=5
+StartLimitInterval=60
+StartLimitBurst=3
+
+# Resource limits
+LimitNOFILE=65535
+LimitNPROC=4096
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/www/server/panel/data /www/server/panel/logs /www/server/panel/BTPanel/static/upload
+ReadOnlyPaths=/www/server/panel
+
+# Process management
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aapanel
+
+[Install]
+WantedBy=multi-user.target

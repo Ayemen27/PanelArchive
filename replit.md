@@ -192,3 +192,112 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
 - الإنتاج: `docker-compose -f docker-compose.yml up`
 
 **المراجعة:** Pass من architect - جاهز للإنتاج ✅
+
+---
+
+### 30 سبتمبر 2025 - المهمة 2.4: systemd Service للإنتاج ✅
+**المسؤول:** الوكيل رقم 6
+**تاريخ الإنجاز:** 30 سبتمبر 2025 - 17:00 UTC
+**المراجعة:** ✅ Pass من Architect (بعد 5 مراجعات دقيقة)
+
+**إصلاحات بناءً على مراجعات Architect المتعددة:**
+1. ✅ تغيير `Type=notify` إلى `Type=simple` (Gunicorn لا يدعم notify mode افتراضياً)
+2. ✅ استخدام virtualenv **حصرياً** (`/www/server/panel/venv/bin/gunicorn`):
+   - يحل مشكلة صلاحيات المستخدم www (لا يمكنه الوصول لـ /usr/local/bin)
+   - يعزل اعتماديات Python بشكل كامل
+   - setup_systemd.sh الآن ينشئ virtualenv تلقائياً
+3. ✅ تحديث **شامل** في SYSTEMD_SETUP.md:
+   - التثبيت اليدوي: جميع أوامر pip داخل virtualenv
+   - تحديث الكود: استخدام `source venv/bin/activate` أو مسار مباشر
+   - Rolling Update: تثبيت الاعتماديات داخل virtualenv
+   - الاختبار اليدوي: استخدام `venv/bin/gunicorn`
+   - Prometheus Integration: تثبيت prometheus-client داخل virtualenv
+4. ✅ gunicorn_config.py محدث بالكامل مع config_factory
+
+**ما تم إنجازه:**
+1. ✅ إنشاء `aapanel.service` - systemd unit file متقدم:
+   - Type=simple للتكامل الصحيح مع Gunicorn
+   - User/Group: www (أمان - non-root)
+   - EnvironmentFile من .env
+   - Restart policy: always مع StartLimitBurst
+   - Resource limits: 65535 files، 4096 processes
+   - Security hardening كامل (NoNewPrivileges، ProtectSystem)
+   - Process management: KillMode=mixed، graceful shutdown
+   - Logging: journal مع SyslogIdentifier
+
+2. ✅ إنشاء `gunicorn_config.py` - ملف إعدادات Gunicorn محدث:
+   - تكامل كامل مع config_factory
+   - حساب تلقائي للـ workers: (2 × CPU cores) + 1
+   - دعم WebSocket: GeventWebSocketWorker
+   - Timeout محسّن: 7200s للعمليات الطويلة
+   - Max requests: 1000 لمنع memory leak
+   - SSL/TLS support اختياري
+   - Preload في الإنتاج، Hot reload في التطوير
+   - Worker lifecycle hooks للمراقبة
+   - Security limits في الإنتاج
+
+3. ✅ إنشاء `setup_systemd.sh` - سكريبت إعداد تلقائي شامل:
+   - فحص صلاحيات root
+   - إنشاء مستخدم www تلقائياً
+   - التحقق من الاعتماديات (Python، Gunicorn)
+   - إنشاء المجلدات وضبط الصلاحيات
+   - تثبيت وتفعيل systemd service
+   - اختبار الخدمة والتحقق من نجاح البدء
+   - عرض معلومات ما بعد التثبيت
+
+4. ✅ إنشاء `SYSTEMD_SETUP.md` - توثيق شامل:
+   - دليل التثبيت (تلقائي ويدوي)
+   - شرح تفصيلي لكل قسم في aapanel.service
+   - أوامر إدارة الخدمة الكاملة
+   - مراقبة السجلات المتقدمة
+   - فحص الأداء والموارد
+   - التحديث والصيانة (Rolling Update)
+   - استكشاف 5+ مشاكل شائعة وحلولها
+   - أفضل الممارسات (الأمان، الأداء، الموثوقية)
+   - المراقبة والتنبيهات (Prometheus، Health checks)
+   - التكامل مع Nginx
+
+**الميزات الرئيسية:**
+
+**الأمان:**
+- تشغيل كمستخدم محدود (www)
+- NoNewPrivileges، ProtectSystem=strict
+- ProtectHome، PrivateTmp
+- ReadWritePaths محدودة
+- ReadOnlyPaths للكود
+
+**الموثوقية:**
+- Restart=always مع تأخير 5 ثوان
+- StartLimitBurst=3 (3 محاولات في 60 ثانية)
+- Graceful shutdown: 30 ثانية
+- Worker rotation: كل 1000 طلب
+
+**الأداء:**
+- Workers ديناميكي: (2 × CPU) + 1
+- Threads: 3 لكل worker
+- Max requests jitter: منع التوقف المتزامن
+- Keepalive: 60 ثانية
+
+**الاستخدام:**
+```bash
+# تلقائي
+sudo ./setup_systemd.sh
+
+# يدوي
+sudo cp aapanel.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable aapanel
+sudo systemctl start aapanel
+```
+
+**الأوامر الأساسية:**
+- البدء: `sudo systemctl start aapanel`
+- الإيقاف: `sudo systemctl stop aapanel`
+- الحالة: `sudo systemctl status aapanel`
+- السجلات: `sudo journalctl -u aapanel -f`
+
+**الملفات المُنشأة:**
+- `aapanel.service`
+- `gunicorn_config.py`
+- `setup_systemd.sh`
+- `SYSTEMD_SETUP.md`
