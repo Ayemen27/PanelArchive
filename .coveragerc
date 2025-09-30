@@ -1,0 +1,43 @@
+# ==================== إعدادات Coverage ====================
+# Coverage Configuration File
+
+[run]
+source = .
+omit = 
+    */tests/*
+    */pyenv/*
+    */BTPanel/*
+    */class/*
+    */class_v2/*
+    */data/*
+    */install/*
+    */logs/*
+    */mod/*
+    */plugin/*
+    setup.py
+    */site-packages/*
+    */__pycache__/*
+    */.*
+
+branch = True
+parallel = False
+
+[report]
+precision = 2
+show_missing = True
+skip_covered = False
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstractmethod
+    @abc.abstractmethod
+
+[html]
+directory = htmlcov
+
+[xml]
+output = coverage.xml
