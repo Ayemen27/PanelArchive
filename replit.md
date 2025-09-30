@@ -125,3 +125,66 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
 **الحالة النهائية:** ✅ Pass من Architect - جاهز للإنتاج
 
 **نسبة التقدم الإجمالية:** 35.7% (المرحلة 3.2 من أصل 7 مراحل)
+
+### 2025-09-30: CI/CD Pipeline - VPS Deployment Automation (المهمة 3.3) ✅
+**المسؤول:** الوكيل رقم 8
+
+**ما تم إنجازه:**
+1. **GitHub Actions Workflow للنشر التلقائي**
+   - `.github/workflows/deploy.yml` - workflow شامل للنشر على VPS
+   - Trigger: بعد build ناجح على main branch، أو manual dispatch
+   - SSH deployment آمن باستخدام SSH keys
+   - 9 خطوات متكاملة: إعداد SSH → backup → نسخ ملفات → تنفيذ → health check → rollback
+
+2. **docker-compose.prod.yml - Production Configuration**
+   - استخدام صور مبنية من ghcr.io (لا حاجة لـ build context)
+   - Environment variables: REGISTRY، IMAGE_NAME، IMAGE_TAG
+   - PostgreSQL 15 + Redis 7 + health checks شاملة
+   - Persistent volumes للبيانات والـ logs
+
+3. **Deployment Script (deploy.sh)**
+   - التحقق من المتطلبات (Docker، Docker Compose، .env)
+   - Pull الصورة الجديدة من ghcr.io
+   - إيقاف آمن للخدمات الحالية
+   - تنظيف الموارد غير المستخدمة
+   - بدء الخدمات الجديدة
+   - Health check شامل (15 محاولة × 5 ثوانٍ)
+   - عرض ملخص النشر والإحصائيات
+
+4. **Advanced Rollback Mechanism (3 iterations مع architect)**
+   - **خطوة 3:** حفظ docker-compose.yml القديم → docker-compose.prev.yml **قبل** الاستبدال
+   - **خطوة 4:** نسخ docker-compose.prod.yml الجديد واستبداله
+   - **خطوة 8:** rollback عند الفشل (deployment أو health check):
+     * استعادة docker-compose.prev.yml الحقيقي
+     * إعادة تشغيل بالتكوين السابق
+     * fallback: إعادة تشغيل النسخة الحالية
+
+5. **Documentation (DEPLOYMENT_SECRETS.md)**
+   - توثيق شامل للـ secrets المطلوبة (9 متغيرات)
+   - تعليمات إعداد VPS خطوة بخطوة
+   - Security best practices
+   - Troubleshooting guide
+   - Maintenance instructions
+
+**التحديات وحلولها (3 مشاكل حرجة):**
+- **التحدي 1:** docker-compose.yml يستخدم build context محلي
+  - **الحل:** إنشاء docker-compose.prod.yml يستخدم image من ghcr.io
+  
+- **التحدي 2:** rollback condition لا يغطي فشل health check
+  - **الحل:** تغيير من `if: failure() && steps.deploy.outcome == 'failure'` إلى `if: failure()`
+  
+- **التحدي 3:** backup timing خاطئ - ينسخ الملف الجديد بدلاً من القديم
+  - **الحل:** فصل خطوة backup (خطوة 3) قبل نسخ الملفات (خطوة 4)
+  - النتيجة: docker-compose.prev.yml يحتوي على النسخة الحقيقية القديمة
+
+**الميزات الرئيسية:**
+- ✅ SSH deployment آمن مع key management
+- ✅ Docker image من ghcr.io (لا حاجة لملفات على VPS)
+- ✅ Health checks متعددة المستويات
+- ✅ Rollback تلقائي موثوق (architect approved بعد 3 iterations)
+- ✅ Resource cleanup تلقائي
+- ✅ توثيق شامل للإعداد والصيانة
+
+**الحالة النهائية:** ✅ Pass من Architect - جاهز للإنتاج (بعد 3 مراجعات)
+
+**نسبة التقدم الإجمالية:** 42.9% (المرحلة 3.3 من أصل 7 مراحل)
