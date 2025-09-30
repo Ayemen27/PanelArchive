@@ -1,0 +1,45 @@
+Downloading dependency package, please wait...
+yarn install v1.22.22
+info No lockfile found.
+[1/4] Resolving packages...
+warning @anthropic-ai/sdk > formdata-node > node-domexception@1.0.0: Use your platform's native DOMException instead
+warning exceljs > archiver > archiver-utils > glob@7.2.3: Glob versions prior to v9 are no longer supported
+warning exceljs > archiver > zip-stream > archiver-utils > glob@7.2.3: Glob versions prior to v9 are no longer supported
+warning exceljs > archiver > archiver-utils > glob > inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+warning exceljs > unzipper > fstream@1.0.12: This package is no longer supported.
+warning exceljs > fast-csv > @fast-csv/format > lodash.isequal@4.5.0: This package is deprecated. Use require('node:util').isDeepStrictEqual instead.
+warning exceljs > unzipper > fstream > rimraf@2.7.1: Rimraf versions prior to v4 are no longer supported
+warning exceljs > unzipper > fstream > rimraf > glob@7.2.3: Glob versions prior to v9 are no longer supported
+warning drizzle-kit > @esbuild-kit/esm-loader@2.6.5: Merged into tsx: https://tsx.is
+warning drizzle-kit > @esbuild-kit/esm-loader > @esbuild-kit/core-utils@3.3.2: Merged into tsx: https://tsx.is
+[2/4] Fetching packages...
+error bcrypt@6.0.0: The engine "node" is incompatible with this module. Expected version ">= 18". Got "16.9.0"
+error Found incompatible module.
+info Visit https://yarnpkg.com/en/docs/cli/install for documentation about this command.
+|-Successify --- Command executed! ---npm ERR! code 1
+npm ERR! path /www/wwwroot/app2/node_modules/puppeteer
+npm ERR! command failed
+npm ERR! command sh -c node install.mjs
+npm ERR! node:fs:1536
+npm ERR!   handleErrorFromBinding(ctx);
+npm ERR!   ^
+npm ERR! 
+npm ERR! Error: EACCES: permission denied, stat '/root/.config/puppeteer'
+npm ERR!     at Object.statSync (node:fs:1536:3)
+npm ERR!     at isDirectorySync (/www/wwwroot/app2/node_modules/cosmiconfig/dist/util.js:88:35)
+npm ERR!     at search (/www/wwwroot/app2/node_modules/cosmiconfig/dist/ExplorerSync.js:47:47)
+npm ERR!     at emplace (/www/wwwroot/app2/node_modules/cosmiconfig/dist/util.js:36:20)
+npm ERR!     at search (/www/wwwroot/app2/node_modules/cosmiconfig/dist/ExplorerSync.js:71:50)
+npm ERR!     at emplace (/www/wwwroot/app2/node_modules/cosmiconfig/dist/util.js:36:20)
+npm ERR!     at search (/www/wwwroot/app2/node_modules/cosmiconfig/dist/ExplorerSync.js:71:50)
+npm ERR!     at emplace (/www/wwwroot/app2/node_modules/cosmiconfig/dist/util.js:36:20)
+npm ERR!     at search (/www/wwwroot/app2/node_modules/cosmiconfig/dist/ExplorerSync.js:71:50)
+npm ERR!     at emplace (/www/wwwroot/app2/node_modules/cosmiconfig/dist/util.js:36:20) {
+npm ERR!   errno: -13,
+npm ERR!   syscall: 'stat',
+npm ERR!   code: 'EACCES',
+npm ERR!   path: '/root/.config/puppeteer'
+npm ERR! }
+
+npm ERR! A complete log of this run can be found in:
+npm ERR!     /www/server/nodejs/v16.9.0/cache/_logs/2025-09-30T02_02_45_203Z-debug.log

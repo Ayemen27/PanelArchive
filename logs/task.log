@@ -1,0 +1,25 @@
+2025-09-30 01:06:39 [INFO]: Service Up
+2025-09-30 01:06:46 [INFO]: Service Up
+2025-09-30 01:06:51 [INFO]: Current task version is the same as the last version, no update tasks to run.
+2025-09-30 01:07:01 [INFO]: Service Up
+2025-09-30 01:07:06 [INFO]: Current task version is the same as the last version, no update tasks to run.
+--2025-09-30 01:23:42--  https://node.aapanel.com/install/0/docker_install.sh
+Resolving node.aapanel.com (node.aapanel.com)... 104.26.10.85, 104.26.11.85, 172.67.73.28, ...
+Connecting to node.aapanel.com (node.aapanel.com)|104.26.10.85|:443... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 21480 (21K) [application/octet-stream]
+Saving to: ‘/tmp/docker_install.sh’
+
+     0K .......... ..........                                 100% 21.5M=0.001s
+
+2025-09-30 01:23:42 (21.5 MB/s) - ‘/tmp/docker_install.sh’ saved [21480/21480]
+
+[2025-09-30 01:29:45,320 pyinotify ERROR] add_watch: cannot watch /var/log/rspamd.dpkg-new WD=-1, Errno=No such file or directory (ENOENT)
+2025-09-30 01:29:45 [ERROR]: add_watch: cannot watch /var/log/rspamd.dpkg-new WD=-1, Errno=No such file or directory (ENOENT)
+2025-09-30 01:33:46 [INFO]: Panel Service: reload
+2025-09-30 01:33:46 [INFO]: /www/server/panel/logs/panel.pid not found, starting panel service...
+2025-09-30 01:43:45 [INFO]: Panel Service: reload
+2025-09-30 01:43:46 [INFO]: /www/server/panel/logs/panel.pid not found, starting panel service...
+2025-09-30 01:45:55 [INFO]: Panel Service: restart
+2025-09-30 01:45:58 [INFO]: Service Up
+2025-09-30 01:46:03 [INFO]: Current task version is the same as the last version, no update tasks to run.

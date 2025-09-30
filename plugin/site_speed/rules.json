@@ -1,0 +1,121 @@
+[
+	{
+        "name":"Default",
+        "ps":"The default rules speed up all dynamic requests!",
+        "force" : {
+            "uri" : [],
+            "ext" : [],
+            "type" : [],
+            "args" : [],
+            "host" : [],
+            "ip" : []
+        },
+
+        "white" : {
+            "not_uri" : [],
+            "uri" : [],
+            "host" : [],
+            "ip" : [],
+            "ext" : [ "css" , "js" ],
+            "type" : [ "video" , "octet-stream" , "image" ],
+            "method" : [ "POST","PUT","DELETE","OPTION" ],
+            "args" : [],
+            "cookie" : []
+        }
+    },
+
+	{
+		"name":"WordPress",
+        "ps":"Acceleration exclusive rules for WordPress",
+		"force": {
+			"uri": [],
+			"ext": [],
+			"type": [],
+			"args": [],
+			"host": [],
+			"ip": []
+		},
+
+		"white": {
+			"not_uri": [],
+			"uri": ["^/wp-login.php$", "captcha"],
+			"host": [],
+			"ip": [],
+			"ext": ["css", "js"],
+			"type": ["video", "octet-stream", "image"],
+			"method": ["POST", "PUT", "DELETE", "OPTION"],
+			"args": [],
+			"cookie": ["wordpress_logged_in_"]
+		}
+	},
+	{
+		"name": "phpcms",
+		"ps": "Acceleration exclusive rules for phpcms",
+		"force": {
+			"uri": [],
+			"ext": [],
+			"type": [],
+			"args": [],
+			"host": [],
+			"ip": []
+		},
+
+		"white": {
+			"not_uri": [],
+			"uri": ["/index.php\\\\?m=member&c=index&a=login", "captcha","/index.php\\\\?m=admin"],
+			"host": [],
+			"ip": [],
+			"ext": ["css", "js"],
+			"type": ["video", "octet-stream", "image"],
+			"method": ["POST", "PUT", "DELETE", "OPTION"],
+			"args": [],
+			"cookie": ["_auth","admin_username"]
+		}
+	},
+	{
+		"name": "drupal",
+		"ps": "Acceleration exclusive rules for drupal blog system",
+		"force": {
+			"uri": [],
+			"ext": [],
+			"type": [],
+			"args": [],
+			"host": [],
+			"ip": []
+		},
+		"white": {
+			"not_uri": [],
+			"uri": ["/user/", "captcha"],
+			"host": [],
+			"ip": [],
+			"ext": ["css", "js"],
+			"type": ["video", "octet-stream", "image"],
+			"method": ["POST", "PUT", "DELETE", "OPTION"],
+			"args": [],
+			"cookie": ["SESS"]
+		}
+	},
+	{
+		"name": "cmseasy",
+		"ps": "Exclusive rules for the acceleration of cmseasy enterprise website construction",
+		"force": {
+			"uri": [],
+			"ext": [],
+			"type": [],
+			"args": [],
+			"host": [],
+			"ip": []
+		},
+		"white": {
+			"not_uri": [],
+			"uri": ["admin","captcha","user","login"],
+			"host": [],
+			"ip": [],
+			"ext": ["css", "js"],
+			"type": ["video", "octet-stream", "image"],
+			"method": ["POST", "PUT", "DELETE", "OPTION"],
+			"args": [],
+			"cookie": ["login_password"]
+		}
+	}
+]

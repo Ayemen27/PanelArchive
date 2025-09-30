@@ -1,0 +1,12 @@
+{
+    "id": 3,
+    "title": "WebSite Speed",
+    "tip": "lib",
+    "name": "site_speed",
+    "type": "plugin",
+    "ps": "Website acceleration, supporting dynamic acceleration of mainstream website projects",
+    "versions": "3.1",
+    "checks": "/www/server/panel/plugin/site_speed",
+    "author": "official",
+    "home": "https://forum.aapanel.com/"
+}

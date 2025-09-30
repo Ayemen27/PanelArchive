@@ -1,0 +1,16 @@
+2025-09-30 01:37:54 - 127.0.0.1:22 => Reconnection attempts:1 
+2025-09-30 01:37:54 - 127.0.0.1:22 => Authenticating private key 
+2025-09-30 01:37:54 - 127.0.0.1:22 => Try to use Ed 25519 private key authentication 
+2025-09-30 01:37:54 - 127.0.0.1:22 => Authentication failed:Authentication failed. 
+2025-09-30 01:39:26 - 127.0.0.1:22 => Reconnection attempts:1 
+2025-09-30 01:39:26 - 127.0.0.1:22 => Authenticating private key 
+2025-09-30 01:39:26 - 127.0.0.1:22 => Try to use Ed 25519 private key authentication 
+2025-09-30 01:39:26 - 127.0.0.1:22 => Authentication failed:Authentication failed. 
+2025-09-30 01:40:11 - 127.0.0.1:22 => Reconnection attempts:1 
+2025-09-30 01:40:11 - 127.0.0.1:22 => Authenticating private key 
+2025-09-30 01:40:11 - 127.0.0.1:22 => Try to use Ed 25519 private key authentication 
+2025-09-30 01:40:11 - 127.0.0.1:22 => Authentication failed:Authentication failed. 
+2025-09-30 01:40:19 - 127.0.0.1:22 => Reconnection attempts:1 
+2025-09-30 01:40:20 - 127.0.0.1:22 => Authenticating private key 
+2025-09-30 01:40:20 - 127.0.0.1:22 => Try to use Ed 25519 private key authentication 
+2025-09-30 01:40:20 - 127.0.0.1:22 => Authentication failed:Authentication failed. 

@@ -1,0 +1,60 @@
+{
+    "monitor_dirs": [
+        "/www",
+        "/web/wwwroot"
+    ],
+    "supported_exts": [
+        ".php",
+        ".jsp",
+        ".asp",
+        ".aspx"
+    ],
+    "scan_interval": 3600,
+    "max_threads": 4,
+    "log_level": "INFO",
+    "scan_oss": false,
+    "oss_dirs": [],
+    "has_oss_mounts": false,
+    "dynamic_detection": true,
+    "exclude_dirs": [
+        "/proc",
+        "/sys",
+        "/dev",
+        "/tmp",
+        "/run",
+        "/usr",
+        "/media",
+        "/mnt",
+        "/sys",
+        "/run",
+        "/opt",
+        "/etc",
+        "/boot",
+        "/usr/src/",
+        "/.Recycle_bin/",
+        "/var/lib/docker/",
+        "/www/server/",
+        "/var/",
+        "/www/wwwlogs/",
+        "/www/backup/"
+    ],
+    "max_file_size": 5242880,
+    "scan_delay": 0.1,
+    "skipped_dirs": {},
+    "max_files_per_dir": 10000,
+    "quarantine": false,
+    "alertable": {
+        "status": true,
+        "safe_type": [
+            "webshell"
+        ],
+        "sender": [],
+        "interval": 10800,
+        "time_rule": {
+            "send_interval": 600
+        },
+        "number_rule": {
+            "day_num": 20
+        }
+    }
+}

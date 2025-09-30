@@ -1,0 +1,12 @@
+{
+  "title": "Node.js version manager",
+  "name": "nodejs",
+  "ps": "Install, uninstall, and configure node.js version",
+  "versions": "2.2",
+  "checks": "/www/server/panel/plugin/nodejs",
+  "author": "official",
+  "home": "http://www.aapanel.com",
+  "beta": false,
+  "force_message": "",
+  "not_substituted":["version_list.json|f"]
+}
