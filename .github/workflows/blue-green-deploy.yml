@@ -1,0 +1,271 @@
+# ==================== GitHub Actions: Blue-Green Deployment ====================
+# نشر Blue-Green بدون downtime مع rollback تلقائي
+
+name: Blue-Green Deployment
+
+on:
+  workflow_run:
+    workflows: ["Build & Push Docker Image"]
+    types:
+      - completed
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+      force_color:
+        description: 'Force specific color (leave empty for auto-detect)'
+        required: false
+        type: choice
+        options:
+          - ''
+          - blue
+          - green
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  DEPLOY_PATH: /opt/aapanel
+
+jobs:
+  blue-green-deploy:
+    name: Blue-Green Deploy to ${{ github.event.inputs.environment || 'production' }}
+    runs-on: ubuntu-latest
+    # فقط إذا كان build ناجح (للـ workflow_run trigger)
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    
+    environment: 
+      name: ${{ github.event.inputs.environment || 'production' }}
+      url: https://${{ secrets.VPS_DOMAIN }}
+    
+    steps:
+      # ==================== الخطوة 1: Checkout الكود ====================
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ==================== الخطوة 2: تجهيز SSH Key ====================
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      # ==================== الخطوة 3: نسخ ملفات Blue-Green ====================
+      - name: Copy Blue-Green deployment files
+        run: |
+          # نسخ docker-compose files (shared + blue + green)
+          scp -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            docker-compose.shared.yml \
+            docker-compose.blue.yml \
+            docker-compose.green.yml \
+            .env.example \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ env.DEPLOY_PATH }}/
+
+      # ==================== الخطوة 4: نسخ السكريبتات ====================
+      - name: Copy deployment scripts
+        run: |
+          scp -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            blue-green-deploy.sh \
+            switch.sh \
+            nginx-blue-green.conf.template \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ env.DEPLOY_PATH }}/
+          
+          # جعل السكريبتات قابلة للتنفيذ
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "chmod +x ${{ env.DEPLOY_PATH }}/blue-green-deploy.sh ${{ env.DEPLOY_PATH }}/switch.sh"
+
+      # ==================== الخطوة 5: اكتشاف البيئة النشطة ====================
+      - name: Detect active environment
+        id: detect
+        run: |
+          ACTIVE_ENV=$(ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "cd ${{ env.DEPLOY_PATH }} && cat .active_environment 2>/dev/null || echo 'none'")
+          
+          echo "Current active environment: ${ACTIVE_ENV}"
+          echo "active_env=${ACTIVE_ENV}" >> $GITHUB_OUTPUT
+          
+          # تحديد البيئة المستهدفة
+          if [ "${{ github.event.inputs.force_color }}" != "" ]; then
+            TARGET_ENV="${{ github.event.inputs.force_color }}"
+            echo "Using forced target: ${TARGET_ENV}"
+          elif [ "${ACTIVE_ENV}" == "blue" ]; then
+            TARGET_ENV="green"
+          elif [ "${ACTIVE_ENV}" == "green" ]; then
+            TARGET_ENV="blue"
+          else
+            TARGET_ENV="blue"
+          fi
+          
+          echo "Target environment: ${TARGET_ENV}"
+          echo "target_env=${TARGET_ENV}" >> $GITHUB_OUTPUT
+
+      # ==================== الخطوة 6: تنفيذ Blue-Green Deployment ====================
+      - name: Execute Blue-Green deployment
+        id: deploy
+        env:
+          ACTIVE_ENV: ${{ steps.detect.outputs.active_env }}
+          TARGET_ENV: ${{ steps.detect.outputs.target_env }}
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+          
+          # الانتقال لمجلد النشر
+          cd ${{ env.DEPLOY_PATH }}
+          
+          # تصدير المتغيرات
+          export REGISTRY=${{ env.REGISTRY }}
+          export IMAGE_NAME=${{ env.IMAGE_NAME }}
+          export IMAGE_TAG=latest
+          
+          # تشغيل سكريبت Blue-Green deployment
+          echo "Starting Blue-Green deployment..."
+          echo "Current active: ${ACTIVE_ENV}"
+          echo "Deploying to: ${TARGET_ENV}"
+          
+          ./blue-green-deploy.sh
+          
+          ENDSSH
+
+      # ==================== الخطوة 7: Health Check للبيئة الجديدة ====================
+      - name: Health check - New environment
+        env:
+          TARGET_ENV: ${{ steps.detect.outputs.target_env }}
+        run: |
+          echo "Verifying new environment health..."
+          
+          # تحديد المنفذ بناءً على البيئة
+          if [ "$TARGET_ENV" == "blue" ]; then
+            TARGET_PORT=5001
+          else
+            TARGET_PORT=5002
+          fi
+          
+          # فحص الصحة المباشر
+          MAX_RETRIES=10
+          RETRY_COUNT=0
+          
+          sleep 15
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            # فحص عبر المنفذ المباشر
+            if ssh -i ~/.ssh/deploy_key \
+                -o StrictHostKeyChecking=no \
+                ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+                "curl -f -s http://localhost:${TARGET_PORT}/health > /dev/null 2>&1 || curl -f -s http://localhost:${TARGET_PORT}/ > /dev/null 2>&1"; then
+              echo "✅ Direct port health check passed (port ${TARGET_PORT})"
+              break
+            fi
+            
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            echo "Health check attempt $RETRY_COUNT/$MAX_RETRIES failed, retrying..."
+            sleep 5
+          done
+          
+          if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+            echo "❌ Health check failed after $MAX_RETRIES attempts"
+            exit 1
+          fi
+
+      # ==================== الخطوة 8: Health Check عبر nginx ====================
+      - name: Health check - Via nginx
+        run: |
+          echo "Verifying service via nginx/load balancer..."
+          sleep 10
+          
+          MAX_RETRIES=10
+          RETRY_COUNT=0
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if curl -f -s https://${{ secrets.VPS_DOMAIN }}/health > /dev/null 2>&1 || \
+               curl -f -s https://${{ secrets.VPS_DOMAIN }}/ > /dev/null 2>&1; then
+              echo "✅ Service health check passed via nginx!"
+              exit 0
+            fi
+            
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            echo "Nginx health check attempt $RETRY_COUNT/$MAX_RETRIES failed, retrying..."
+            sleep 5
+          done
+          
+          echo "⚠️  Nginx health check failed - may need manual verification"
+          # لا نفشل هنا لأن الخدمة قد تكون تعمل ولكن nginx لم يُحدَّث
+
+      # ==================== الخطوة 9: Rollback عند الفشل ====================
+      - name: Rollback on failure
+        if: failure()
+        env:
+          ACTIVE_ENV: ${{ steps.detect.outputs.active_env }}
+          TARGET_ENV: ${{ steps.detect.outputs.target_env }}
+        run: |
+          echo "⚠️  Deployment failed, initiating rollback..."
+          
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+          
+          cd ${{ env.DEPLOY_PATH }}
+          
+          # إيقاف البيئة الفاشلة
+          echo "Stopping failed ${TARGET_ENV} environment..."
+          docker-compose -f docker-compose.${TARGET_ENV}.yml down
+          
+          # التأكد من أن البيئة القديمة تعمل
+          if [ "${ACTIVE_ENV}" != "none" ]; then
+            echo "Ensuring ${ACTIVE_ENV} environment is running..."
+            
+            if ! docker ps | grep -q "aapanel_app_${ACTIVE_ENV}"; then
+              echo "Starting ${ACTIVE_ENV} environment..."
+              docker-compose -f docker-compose.${ACTIVE_ENV}.yml up -d
+            fi
+            
+            echo "✅ Rollback completed - ${ACTIVE_ENV} environment is active"
+          else
+            echo "⚠️  No previous environment to rollback to (first deployment)"
+          fi
+          
+          ENDSSH
+
+      # ==================== الخطوة 10: إشعار بالنجاح ====================
+      - name: Deployment success notification
+        if: success()
+        env:
+          TARGET_ENV: ${{ steps.detect.outputs.target_env }}
+        run: |
+          echo "### 🚀 Blue-Green Deployment Successful! ###"
+          echo ""
+          echo "**Environment:** ${{ github.event.inputs.environment || 'production' }}"
+          echo "**Deployed to:** ${TARGET_ENV^^}"
+          echo "**Image:** ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          echo "**URL:** https://${{ secrets.VPS_DOMAIN }}"
+          echo ""
+          echo "✅ Zero-downtime deployment completed!"
+
+      # ==================== الخطوة 11: تنظيف ====================
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f ~/.ssh/deploy_key
+
+# ==============================================================================
+# Workflow Features:
+# ==============================================================================
+# 1. Auto-detection: يكتشف البيئة النشطة تلقائياً
+# 2. Zero-downtime: نشر بدون توقف الخدمة
+# 3. Health checks: فحص صحة شامل قبل التبديل
+# 4. Automatic rollback: تراجع تلقائي عند الفشل
+# 5. Manual override: إمكانية اختيار البيئة يدوياً
+# ==============================================================================

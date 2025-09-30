@@ -1,0 +1,105 @@
+# ==============================================================================
+# Docker Compose Configuration - Green Environment
+# ==============================================================================
+# Blue-Green Deployment Strategy - Green Environment
+# This is one of two identical environments (Blue/Green) for zero-downtime deploys
+#
+# Prerequisites:
+#   docker-compose -f docker-compose.shared.yml up -d
+#
+# Usage:
+#   docker-compose -f docker-compose.green.yml up -d
+# ==============================================================================
+
+version: '3.8'
+
+# ==============================================================================
+# Services
+# ==============================================================================
+services:
+  
+  # ============================================================================
+  # Green Application Service
+  # ============================================================================
+  app-green:
+    # استخدام الصورة المبنية من ghcr.io
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME}:${IMAGE_TAG:-latest}
+    container_name: aapanel_app_green
+    
+    # Port mapping - Green على منفذ 5002
+    ports:
+      - "5002:5000"
+    
+    # Environment variables
+    env_file:
+      - .env
+    environment:
+      - ENVIRONMENT=production
+      - APP_COLOR=green
+      - PORT=5000
+    
+    # Volumes
+    volumes:
+      # Persistent application data - منفصلة لكل بيئة
+      - app_data_green:/app/data
+      - app_logs_green:/app/logs
+      # Production configs (optional)
+      - ./config:/app/config:ro
+    
+    # Network
+    networks:
+      - aapanel_network
+    
+    # Restart policy
+    restart: always
+    
+    # Health check
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || curl -f http://localhost:5000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Labels للتعريف
+    labels:
+      com.aapanel.deployment.color: "green"
+      com.aapanel.deployment.type: "blue-green"
+
+# ==============================================================================
+# Persistent Volumes
+# ==============================================================================
+volumes:
+  # Green Application data (منفصلة)
+  app_data_green:
+    driver: local
+    name: aapanel_app_data_green
+  
+  # Green Application logs (منفصلة)
+  app_logs_green:
+    driver: local
+    name: aapanel_app_logs_green
+
+# ==============================================================================
+# Networks
+# ==============================================================================
+networks:
+  aapanel_network:
+    external: true
+    name: aapanel_network
+
+# ==============================================================================
+# Important Notes
+# ==============================================================================
+#
+# 1. Prerequisites:
+#    - Start shared services first: docker-compose -f docker-compose.shared.yml up -d
+#
+# 2. Green Environment:
+#    - Runs on port 5002
+#    - Uses shared PostgreSQL and Redis
+#    - Separate logs volume
+#
+# 3. Can run simultaneously with Blue environment
+#
+# ==============================================================================

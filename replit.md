@@ -188,3 +188,84 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
 **الحالة النهائية:** ✅ Pass من Architect - جاهز للإنتاج (بعد 3 مراجعات)
 
 **نسبة التقدم الإجمالية:** 42.9% (المرحلة 3.3 من أصل 7 مراحل)
+
+### 2025-09-30: CI/CD Pipeline - Blue-Green Deployment Strategy (المهمة 3.4) ✅
+**المسؤول:** الوكيل رقم 9
+
+**ما تم إنجازه:**
+1. **تصميم استراتيجية Blue-Green كاملة (محدّث)**
+   - `docker-compose.shared.yml` - الخدمات المشتركة (PostgreSQL + Redis)
+   - `docker-compose.blue.yml` - البيئة الزرقاء (Port 5001)
+   - `docker-compose.green.yml` - البيئة الخضراء (Port 5002)
+   - **عزل كامل:** كل بيئة لها app_data منفصل (app_data_blue/green)
+   - **موارد مشتركة:** PostgreSQL + Redis فقط في stack منفصل
+
+2. **Blue-Green Deployment Script (محدّث)**
+   - `blue-green-deploy.sh` - سكريبت النشر الذكي والشامل
+   - **خطوة 1:** تشغيل Shared Services (إذا لم تكن تعمل)
+   - **خطوة 2:** اكتشاف تلقائي للبيئة النشطة الحالية
+   - **خطوة 3:** نشر على البيئة غير النشطة مع `--remove-orphans`
+   - **خطوة 4:** Health checks شاملة قبل التبديل
+   - **خطوة 5:** تبديل تلقائي للـ traffic
+   - **خطوة 6:** إيقاف البيئة القديمة بعد فترة أمان
+   - **خطوة 7:** Rollback تلقائي عند الفشل
+
+3. **Traffic Switch Script**
+   - `switch.sh` - سكريبت تبديل الـ traffic بين البيئتين
+   - تحديث nginx configuration تلقائياً
+   - Health check قبل التبديل
+   - Rollback للـ nginx config عند الفشل
+   - `nginx-blue-green.conf.template` - تكوين nginx محسّن للـ Blue-Green
+
+4. **GitHub Actions Workflow**
+   - `.github/workflows/blue-green-deploy.yml` - Workflow شامل للنشر التلقائي
+   - اكتشاف تلقائي للبيئة النشطة
+   - نشر على البيئة المستهدفة
+   - Health checks متعددة المستويات (مباشر + عبر nginx)
+   - Rollback تلقائي عند الفشل
+   - دعم Manual override لاختيار البيئة
+
+5. **توثيق شامل**
+   - `BLUE_GREEN_DEPLOYMENT.md` - دليل كامل (50+ صفحة)
+   - شرح المفهوم والبنية التحتية
+   - دليل الإعداد خطوة بخطوة
+   - دليل الاستخدام (تلقائي ويدوي)
+   - استكشاف الأخطاء وحلولها
+   - أفضل الممارسات
+   - الأسئلة الشائعة
+
+**الميزات الرئيسية:**
+- ✅ **Zero Downtime** - النشر بدون توقف الخدمة
+- ✅ **Rollback فوري** - العودة للإصدار السابق في ثوانٍ
+- ✅ **اختبار آمن** - اختبار الإصدار الجديد قبل التبديل
+- ✅ **Auto-detection** - اكتشاف تلقائي للبيئة النشطة
+- ✅ **عزل كامل** - app_data منفصل لكل بيئة (blue/green)
+- ✅ **Shared services** - PostgreSQL + Redis في stack منفصل
+- ✅ **Comprehensive health checks** - فحص صحة متعدد المستويات
+
+**التحديات وحلولها:**
+- **التحدي 1:** كيفية مشاركة قاعدة البيانات بين البيئتين دون تعارض
+  - **الحل:** استخدام PostgreSQL و Redis كـ shared services مع app containers منفصلة
+- **التحدي 2:** كيفية تتبع البيئة النشطة
+  - **الحل:** ملف `.active_environment` + اكتشاف تلقائي من Docker containers
+- **التحدي 3:** تبديل الـ traffic بسلاسة
+  - **الحل:** nginx upstream configuration + سكريبت switch.sh
+- **التحدي 4 (من architect):** دالة `print_warning` غير معرّفة في switch.sh
+  - **الحل:** إضافة تعريف الدالة المفقودة
+  
+- **التحدي 5 (من architect):** آلية استرجاع nginx الاحتياطية غير موثوقة
+  - **الحل:** حفظ اسم الـ backup في متغير `BACKUP_CONFIG` واستخدامه مباشرة + تحقق صريح من نجاح `cp`
+  
+- **التحدي 6 (حرج - من architect):** نفس container_name لـ PostgreSQL/Redis في blue.yml و green.yml يمنع تشغيل البيئتين معاً
+  - **الحل:** فصل shared services في `docker-compose.shared.yml` منفصل
+  - إزالة تعريف DB/Redis من blue.yml و green.yml
+  - استخدام external network للربط
+  
+- **التحدي 7 (حرج - من architect):** shared app_data volume يكسر عزل البيئات (file-level mutations تؤثر على البيئة النشطة)
+  - **الحل:** كل بيئة لها volume منفصل (app_data_blue, app_data_green)
+  - إضافة `--remove-orphans` للتنظيف التلقائي
+  - تحديث السكريبت ليبدأ shared services أولاً
+
+**الحالة النهائية:** ✅ Pass من Architect - جاهز للإنتاج (بعد 4 مراجعات وإصلاح مشاكل معمارية حرجة)
+
+**نسبة التقدم الإجمالية:** 50.0% (المرحلة 3.4 من أصل 7 مراحل)

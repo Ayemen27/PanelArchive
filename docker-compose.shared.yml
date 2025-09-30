@@ -1,0 +1,119 @@
+# ==============================================================================
+# Docker Compose Configuration - Shared Services
+# ==============================================================================
+# Shared infrastructure for Blue-Green Deployment
+# PostgreSQL and Redis are shared between Blue and Green environments
+#
+# Usage:
+#   docker-compose -f docker-compose.shared.yml up -d
+# ==============================================================================
+
+version: '3.8'
+
+# ==============================================================================
+# Shared Services
+# ==============================================================================
+services:
+  
+  # ============================================================================
+  # Shared PostgreSQL Database Service
+  # ============================================================================
+  postgres-shared:
+    image: postgres:15-alpine
+    container_name: aapanel_postgres_shared
+    
+    # Environment file
+    env_file:
+      - .env
+    
+    # Volumes
+    volumes:
+      # Persistent PostgreSQL data
+      - postgres_data_shared:/var/lib/postgresql/data
+    
+    # Network
+    networks:
+      - aapanel_network
+    
+    # Restart policy
+    restart: always
+    
+    # Health check
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-aapanel_user} -d $${POSTGRES_DB:-production_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+  
+  # ============================================================================
+  # Shared Redis Caching Service
+  # ============================================================================
+  redis-shared:
+    image: redis:7-alpine
+    container_name: aapanel_redis_shared
+    
+    # Additional commands
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    
+    # Volumes
+    volumes:
+      # Persistent Redis data
+      - redis_data_shared:/data
+    
+    # Network
+    networks:
+      - aapanel_network
+    
+    # Restart policy
+    restart: always
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+# ==============================================================================
+# Persistent Volumes
+# ==============================================================================
+volumes:
+  # Shared PostgreSQL data
+  postgres_data_shared:
+    driver: local
+    name: aapanel_postgres_data_shared
+  
+  # Shared Redis data
+  redis_data_shared:
+    driver: local
+    name: aapanel_redis_data_shared
+
+# ==============================================================================
+# Networks
+# ==============================================================================
+networks:
+  aapanel_network:
+    driver: bridge
+    name: aapanel_network
+
+# ==============================================================================
+# Important Notes
+# ==============================================================================
+#
+# 1. Start shared services first:
+#    docker-compose -f docker-compose.shared.yml up -d
+#
+# 2. Then start blue or green:
+#    docker-compose -f docker-compose.blue.yml up -d
+#    docker-compose -f docker-compose.green.yml up -d
+#
+# 3. Shared services persist between deployments
+#
+# ==============================================================================
