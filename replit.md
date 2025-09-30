@@ -123,11 +123,94 @@ print(f"نسخة Python: {info['python_version']}")
 # في ملف .env أو terminal
 ENVIRONMENT=development  # لفرض بيئة التطوير
 ENVIRONMENT=production   # لفرض بيئة الإنتاج
-ENVIRONMENT=prod        # يعمل أيضاً
-ENVIRONMENT=dev         # يعمل أيضاً
 ```
 
 **ملاحظة**: التحكم اليدوي له الأولوية على الاكتشاف التلقائي.
+
+---
+
+## طريقة استخدام نظام الإعدادات الموحد (Config Factory)
+
+### الاستيراد والاستخدام الأساسي
+```python
+# استيراد دالة get_config
+from config_factory import get_config
+
+# الحصول على الإعدادات المناسبة للبيئة الحالية
+config = get_config()
+
+# استخدام الإعدادات في التطبيق
+app.config['SECRET_KEY'] = config.SECRET_KEY
+app.config['DEBUG'] = config.DEBUG
+app.config['SQLALCHEMY_DATABASE_URI'] = config.DATABASE_URI
+
+# تشغيل التطبيق
+if __name__ == '__main__':
+    app.run(host=config.HOST, port=config.PORT)
+```
+
+### الحصول على إعدادات بيئة محددة
+```python
+from config_factory import get_config_for_environment
+
+# الحصول على إعدادات بيئة التطوير
+dev_config = get_config_for_environment('development')
+
+# الحصول على إعدادات بيئة الإنتاج
+prod_config = get_config_for_environment('production')
+```
+
+### الإعدادات المتاحة
+
+#### إعدادات مشتركة (BaseConfig):
+- `SECRET_KEY` - مفتاح الأمان (يتم توليده تلقائياً في التطوير)
+- `DATABASE_URI` - رابط قاعدة البيانات
+- `PORT` - منفذ التطبيق
+- `HOST` - عنوان الخادم
+
+#### إعدادات التطوير (DevelopmentConfig):
+- `DEBUG = True`
+- قاعدة بيانات SQLite محلية
+- `LOG_LEVEL = 'DEBUG'`
+- `CORS` مفعّل
+- `AUTO_RELOAD = True`
+
+#### إعدادات الإنتاج (ProductionConfig):
+- `DEBUG = False`
+- قاعدة بيانات MySQL/PostgreSQL خارجية
+- **SECRET_KEY إلزامي** (يرفع خطأ إذا لم يكن موجوداً)
+- `FORCE_HTTPS = True`
+- `SESSION_COOKIE_SECURE = True`
+- دعم SSL/TLS
+
+### متغيرات البيئة المطلوبة
+
+#### للإنتاج (Production):
+```bash
+# إلزامية
+SECRET_KEY=your-secret-key-here
+
+# قاعدة البيانات
+DATABASE_TYPE=mysql  # أو postgresql
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=your-password
+DB_NAME=production_db
+DB_DRIVER=pymysql  # اختياري (افتراضي: pymysql - قيم مقبولة: pymysql, mysqldb, mysqlconnector)
+
+# SSL (اختياري)
+SSL_CERT_PATH=/path/to/cert.pem
+SSL_KEY_PATH=/path/to/key.pem
+```
+
+#### للتطوير (Development):
+```bash
+# كل شيء اختياري - يتم استخدام القيم الافتراضية
+PORT=5000  # اختياري
+```
+
+**ملاحظة مهمة**: في الإنتاج، يجب تعيين `SECRET_KEY` وإلا سيتم رفع خطأ `RuntimeError`.
 
 ---
 
