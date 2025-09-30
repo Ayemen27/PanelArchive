@@ -1,0 +1,294 @@
+# ================================================================
+# nginx Configuration Template for aaPanel
+# ================================================================
+# هذا الملف هو template يمكن استخدامه لإعداد nginx في بيئة الإنتاج
+# استخدم السكريبت setup_nginx.sh لتطبيق هذا الملف
+#
+# المتغيرات المطلوبة:
+#   - DOMAIN: اسم النطاق (مثال: example.com)
+#   - APP_PORT: منفذ التطبيق (افتراضي: 5000)
+#   - SSL_CERT: مسار شهادة SSL
+#   - SSL_KEY: مسار مفتاح SSL
+# ================================================================
+
+# Upstream definition - التطبيق الرئيسي
+upstream aapanel_app {
+    # Application server (Gunicorn)
+    server 127.0.0.1:${APP_PORT} fail_timeout=0;
+    
+    # Optional: للتوازن بين عدة instances
+    # server 127.0.0.1:5001 fail_timeout=0;
+    # server 127.0.0.1:5002 fail_timeout=0;
+    
+    # Keep alive connections
+    keepalive 32;
+}
+
+# Rate limiting zones
+# الحماية من الهجمات DDoS وbrute force
+limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
+limit_req_zone $binary_remote_addr zone=login_limit:10m rate=5r/m;
+limit_conn_zone $binary_remote_addr zone=conn_limit:10m;
+
+# ================================================================
+# HTTP Server Block - إعادة التوجيه إلى HTTPS
+# ================================================================
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN} www.${DOMAIN};
+    
+    # ACME challenge for Let's Encrypt
+    location ^~ /.well-known/acme-challenge/ {
+        default_type "text/plain";
+        root /var/www/certbot;
+    }
+    
+    # Redirect all HTTP to HTTPS
+    location / {
+        return 301 https://$server_name$request_uri;
+    }
+}
+
+# ================================================================
+# HTTPS Server Block - الإعدادات الرئيسية
+# ================================================================
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name ${DOMAIN} www.${DOMAIN};
+    
+    # Root directory (for static files if needed)
+    root /var/www/aapanel;
+    
+    # ============================================================
+    # SSL/TLS Configuration - أمان عالي
+    # ============================================================
+    ssl_certificate ${SSL_CERT};
+    ssl_certificate_key ${SSL_KEY};
+    
+    # SSL protocols and ciphers (Modern configuration)
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384';
+    ssl_prefer_server_ciphers off;
+    
+    # SSL session cache and timeout
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+    
+    # OCSP Stapling
+    ssl_stapling on;
+    ssl_stapling_verify on;
+    resolver 8.8.8.8 8.8.4.4 valid=300s;
+    resolver_timeout 5s;
+    
+    # ============================================================
+    # Security Headers - رؤوس الأمان
+    # ============================================================
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Content-Security-Policy "default-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' data: https:; connect-src 'self' https: wss:;" always;
+    
+    # ============================================================
+    # Logging - السجلات
+    # ============================================================
+    access_log /var/log/nginx/aapanel_access.log;
+    error_log /var/log/nginx/aapanel_error.log warn;
+    
+    # ============================================================
+    # Performance Settings - تحسينات الأداء
+    # ============================================================
+    
+    # Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css text/xml text/javascript 
+               application/json application/javascript application/xml+rss 
+               application/rss+xml font/truetype font/opentype 
+               application/vnd.ms-fontobject image/svg+xml;
+    
+    # Client settings
+    client_max_body_size 100M;
+    client_body_buffer_size 128k;
+    client_header_buffer_size 1k;
+    large_client_header_buffers 4 16k;
+    
+    # Timeouts
+    client_body_timeout 12;
+    client_header_timeout 12;
+    keepalive_timeout 65;
+    send_timeout 10;
+    
+    # ============================================================
+    # Static Files - الملفات الثابتة (caching)
+    # ============================================================
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+        
+        # Try to serve static files, fallback to app
+        try_files $uri @proxy_to_app;
+    }
+    
+    # Favicon
+    location = /favicon.ico {
+        log_not_found off;
+        access_log off;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+    
+    # Robots.txt
+    location = /robots.txt {
+        log_not_found off;
+        access_log off;
+    }
+    
+    # ============================================================
+    # API Endpoints - Rate limiting للـ API
+    # ============================================================
+    location /api/ {
+        # Rate limiting
+        limit_req zone=api_limit burst=20 nodelay;
+        limit_conn conn_limit 10;
+        
+        include proxy_params;
+        proxy_pass http://aapanel_app;
+    }
+    
+    # Login endpoint - حماية إضافية
+    location /login {
+        limit_req zone=login_limit burst=5 nodelay;
+        
+        include proxy_params;
+        proxy_pass http://aapanel_app;
+    }
+    
+    # ============================================================
+    # WebSocket Support - دعم WebSocket (مهم لـ aaPanel)
+    # ============================================================
+    location /ws/ {
+        proxy_pass http://aapanel_app;
+        
+        # WebSocket headers
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        # Standard proxy headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # WebSocket timeouts (longer for persistent connections)
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        
+        # Disable buffering for WebSocket
+        proxy_buffering off;
+    }
+    
+    # ============================================================
+    # Main Application - التطبيق الرئيسي
+    # ============================================================
+    location / {
+        # Try static files first, then proxy to app
+        try_files $uri @proxy_to_app;
+    }
+    
+    # Proxy to application
+    location @proxy_to_app {
+        # Standard proxy headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+        
+        # Proxy settings
+        proxy_pass http://aapanel_app;
+        proxy_redirect off;
+        proxy_buffering off;
+        
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+    
+    # ============================================================
+    # Health Check Endpoint - لـ monitoring
+    # ============================================================
+    location /health {
+        access_log off;
+        proxy_pass http://aapanel_app;
+        proxy_set_header Host $host;
+    }
+    
+    # ============================================================
+    # Error Pages - صفحات الأخطاء المخصصة
+    # ============================================================
+    error_page 404 /404.html;
+    error_page 500 502 503 504 /50x.html;
+    
+    location = /404.html {
+        internal;
+        root /var/www/aapanel/errors;
+    }
+    
+    location = /50x.html {
+        internal;
+        root /var/www/aapanel/errors;
+    }
+    
+    # ============================================================
+    # Security - منع الوصول لملفات حساسة
+    # ============================================================
+    
+    # Deny access to hidden files
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+    
+    # Deny access to backup files
+    location ~ ~$ {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+    
+    # Deny access to sensitive files
+    location ~* \.(env|git|gitignore|htaccess|htpasswd|ini|log|sh|sql|conf)$ {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+}
+
+# ================================================================
+# Additional configurations (optional)
+# ================================================================
+
+# www to non-www redirect (optional)
+# server {
+#     listen 443 ssl http2;
+#     listen [::]:443 ssl http2;
+#     server_name www.${DOMAIN};
+#     
+#     ssl_certificate ${SSL_CERT};
+#     ssl_certificate_key ${SSL_KEY};
+#     
+#     return 301 https://${DOMAIN}$request_uri;
+# }
