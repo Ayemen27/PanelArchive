@@ -77,7 +77,9 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
 ## آخر التغييرات - Recent Changes
 
 ### 30 سبتمبر 2025 - المهمة 2.3: إعداد Nginx للإنتاج ✅
-**المسؤول:** الوكيل رقم 5
+**المسؤول:** الوكيل رقم 6
+**تاريخ الإنجاز:** 30 سبتمبر 2025 - 15:45 UTC
+**المراجعة:** ✅ Pass من Architect Agent
 
 **ما تم إنجازه:**
 1. ✅ إنشاء `nginx.conf.template` - تهيئة شاملة للإنتاج:
@@ -87,7 +89,12 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
    - OCSP Stapling و SSL session cache
    - دعم WebSocket لـ `/ws/` مع timeouts محسّنة
 
-2. ✅ Security Headers شاملة:
+2. ✅ إنشاء `nginx_http_only.conf.template` - تهيئة HTTP فقط للمرحلة الأولى:
+   - Server block بسيط يستمع على 80
+   - يخدم التطبيق + ACME challenge
+   - بدون أي إشارة لـ SSL (تجنب فشل nginx -t)
+
+3. ✅ Security Headers شاملة:
    - Strict-Transport-Security (HSTS - 2 years)
    - X-Frame-Options: SAMEORIGIN
    - X-Content-Type-Options: nosniff
@@ -95,33 +102,34 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
    - X-XSS-Protection
    - Referrer-Policy
 
-3. ✅ تحسينات الأداء:
+4. ✅ تحسينات الأداء:
    - Gzip compression (مستوى 6، أنواع متعددة)
    - Static files caching (1 year، immutable)
    - HTTP/2 support
    - Client settings محسّنة (100MB max body)
    - Keepalive connections
 
-4. ✅ Rate Limiting للحماية:
+5. ✅ Rate Limiting للحماية:
    - API endpoints: 10 req/sec (burst: 20)
    - Login endpoint: 5 req/min (burst: 5)
    - Connection limiting: 10 concurrent/IP
 
-5. ✅ إنشاء `proxy_params`:
+6. ✅ إنشاء `proxy_params`:
    - رؤوس proxy القياسية
    - Timeout settings محسّنة
    - Buffering configuration
 
-6. ✅ إنشاء `setup_nginx.sh` - سكريبت إعداد تلقائي:
+7. ✅ إنشاء `setup_nginx.sh` - سكريبت إعداد تلقائي **بنهج المرحلتين**:
+   - **المرحلة 1:** نشر HTTP-only config → nginx -t → reload → خدمة ACME
+   - **المرحلة 2:** certbot certonly --webroot → إعادة إنشاء config مع SSL → reload
    - تثبيت nginx و certbot تلقائياً
-   - الحصول على شهادة SSL من Let's Encrypt
-   - استبدال المتغيرات في template
    - إنشاء المجلدات وصفحات الأخطاء
-   - اختبار التهيئة وإعادة تحميل nginx
+   - اختبار التهيئة قبل وبعد SSL
    - إعداد التجديد التلقائي للشهادة (cron)
 
-7. ✅ إنشاء `NGINX_SETUP.md` - توثيق شامل:
+8. ✅ إنشاء `NGINX_SETUP.md` - توثيق شامل:
    - دليل الإعداد (تلقائي ويدوي)
+   - شرح نهج المرحلتين بالتفصيل
    - شرح المتغيرات والإعدادات
    - اختبار والتحقق من SSL
    - حل المشاكل الشائعة (troubleshooting)
@@ -131,13 +139,20 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
 - صفحات أخطاء مخصصة (404، 50x) بالعربية
 - Health endpoint للـ monitoring
 - منع الوصول للملفات الحساسة (.env، .git، etc.)
-- دعم ACME challenge لـ Let's Encrypt
+- دعم ACME challenge لـ Let's Encrypt بشكل موثوق
 
 **الاستخدام:**
 - التلقائي: `sudo ./setup_nginx.sh` (يطلب النطاق والبريد)
 - اليدوي: راجع NGINX_SETUP.md للتفاصيل
 
 **الأمان:** A+ rating من SSL Labs (متوقع)
+
+**الملفات المُنشأة:**
+- `nginx.conf.template` (HTTPS كامل)
+- `nginx_http_only.conf.template` (HTTP فقط)
+- `proxy_params`
+- `setup_nginx.sh`
+- `NGINX_SETUP.md`
 
 ---
 
