@@ -1,0 +1,190 @@
+# ==================== GitHub Actions: Docker Build & Push ====================
+# بناء صورة Docker تلقائياً ورفعها إلى GitHub Container Registry
+
+name: Build & Push Docker Image
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      push_image:
+        description: 'Push image to registry'
+        required: false
+        default: 'true'
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      tags: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      # ==================== الخطوة 1: Checkout الكود ====================
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ==================== الخطوة 2: إعداد Docker Buildx ====================
+      # Buildx يدعم multi-platform builds و layer caching المتقدم
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      # ==================== الخطوة 3: تسجيل الدخول إلى GitHub Container Registry ====================
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ==================== الخطوة 4: استخراج Metadata للصورة ====================
+      # تحديد tags و labels بناءً على Git ref و SHA
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # Tag للـ branch name (main → latest)
+            type=ref,event=branch
+            # Tag للـ pull request number
+            type=ref,event=pr
+            # Semantic version tags (v1.2.3 → 1.2.3, 1.2, 1)
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            # Git SHA (أول 7 أحرف)
+            type=sha,prefix=,format=short
+            # Tag "latest" للـ main branch فقط
+            type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.title=aaPanel
+            org.opencontainers.image.description=aaPanel server management control panel
+            org.opencontainers.image.vendor=aaPanel Team
+            maintainer=${{ github.actor }}
+
+      # ==================== الخطوة 5: بناء ورفع Docker Image ====================
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          # Push فقط إذا كان push أو tag (وليس PR)
+          push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push_image != 'false') }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # ==================== Layer Caching للسرعة ====================
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Build arguments
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+
+      # ==================== الخطوة 6: توليد SBOM (Software Bill of Materials) ====================
+      # لتتبع Dependencies والأمان
+      - name: Generate SBOM
+        if: github.event_name != 'pull_request'
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      # ==================== الخطوة 7: Scan الصورة للثغرات الأمنية ====================
+      - name: Scan image for vulnerabilities
+        if: github.event_name != 'pull_request'
+        uses: anchore/scan-action@v3
+        id: scan
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          fail-build: false
+          severity-cutoff: critical
+
+      # ==================== الخطوة 8: رفع Vulnerability Report ====================
+      - name: Upload vulnerability report
+        if: github.event_name != 'pull_request'
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: ${{ steps.scan.outputs.sarif }}
+
+      # ==================== الخطوة 9: طباعة معلومات الصورة ====================
+      - name: Print image info
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "### 🐳 Docker Image Built Successfully! ###"
+          echo ""
+          echo "**Registry:** ${{ env.REGISTRY }}"
+          echo "**Image:** ${{ env.IMAGE_NAME }}"
+          echo "**Digest:** ${{ steps.build.outputs.digest }}"
+          echo ""
+          echo "**Tags:**"
+          echo "${{ steps.meta.outputs.tags }}" | sed 's/^/  - /'
+          echo ""
+          echo "### Pull Command ###"
+          echo "\`\`\`bash"
+          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          echo "\`\`\`"
+
+  # ==================== Job 2: اختبار الصورة المبنية ====================
+  test-image:
+    name: Test Docker Image
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull and test image
+        run: |
+          # Pull الصورة باستخدام digest (الأكثر دقة وموثوقية)
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build.outputs.digest }}
+          
+          # تشغيل الصورة
+          docker run -d \
+            --name aapanel-test \
+            -p 5000:5000 \
+            -e ENVIRONMENT=production \
+            -e SECRET_KEY=test-secret-key-for-ci \
+            -e PORT=5000 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build.outputs.digest }}
+          
+          # الانتظار للتطبيق ليبدأ
+          sleep 10
+          
+          # فحص أن التطبيق يعمل
+          curl -f http://localhost:5000/ || curl -f http://localhost:5000/health || exit 1
+          
+          # عرض logs
+          docker logs aapanel-test
+          
+          # إيقاف وحذف الحاوية
+          docker stop aapanel-test
+          docker rm aapanel-test
+          
+          echo "✅ Image test passed!"
