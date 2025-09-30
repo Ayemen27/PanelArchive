@@ -1,0 +1,142 @@
+# ==============================================================================
+# Docker Compose Override Configuration - Development Environment
+# ==============================================================================
+# يوفر هذا الملف إعدادات التطوير مع SQLite و Hot Reload
+# This file provides development setup with SQLite and Hot Reload
+#
+# ملاحظة: يتم دمج هذا الملف تلقائياً مع docker-compose.yml
+# Note: This file is automatically merged with docker-compose.yml
+#
+# للتشغيل - To run (development mode):
+#   docker-compose up
+#
+# للإنتاج فقط - For production only (ignore override):
+#   docker-compose -f docker-compose.yml up
+#
+# ==============================================================================
+
+version: '3.8'
+
+# ==============================================================================
+# تجاوز الخدمات - Service Overrides
+# ==============================================================================
+services:
+  
+  # ============================================================================
+  # تجاوز إعدادات التطبيق للتطوير - App Service Override for Development
+  # ============================================================================
+  app:
+    # تجاوز الأمر للتطوير مع Hot Reload
+    # Override command for development with Hot Reload
+    # استخدام Gunicorn مع reload للاستقرار
+    command: gunicorn --reload -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 -b 0.0.0.0:5000 BTPanel:app
+    
+    # استخدام ملف البيئة - Use environment file
+    env_file:
+      - .env
+    
+    # تجاوز الأحجام للتطوير - Override volumes for development
+    volumes:
+      # Bind mount للكود المصدري (للتطوير السريع مع Hot Reload)
+      # Bind mount for source code (for rapid development with Hot Reload)
+      - .:/app:cached
+    
+    # تجاوز المنافذ - Override ports (expose additional ports)
+    ports:
+      - "5000:5000"     # Flask development server
+      - "5678:5678"     # Python debugger (optional)
+    
+    # تجاوز الاعتماديات - Override dependencies (no DB required for SQLite)
+    depends_on:
+      - redis
+    
+    # تجاوز سياسة إعادة التشغيل - Override restart policy (for easier debugging)
+    restart: "no"
+    
+    # تجاوز فحص الصحة - Override healthcheck (more lenient for development)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 60s
+      timeout: 5s
+      retries: 2
+      start_period: 10s
+  
+  # ============================================================================
+  # تعطيل PostgreSQL في التطوير - Disable PostgreSQL in Development
+  # ============================================================================
+  # لأننا نستخدم SQLite في التطوير، لا حاجة لـ PostgreSQL
+  # Since we use SQLite in development, PostgreSQL is not needed
+  postgres:
+    # تعطيل الخدمة بالكامل - Completely disable the service
+    profiles:
+      - production-only
+  
+  # ============================================================================
+  # إبقاء Redis (اختياري للتطوير) - Keep Redis (optional for development)
+  # ============================================================================
+  redis:
+    # يمكن استخدام Redis في التطوير للاختبار
+    # Redis can be used in development for testing
+    
+    # تجاوز سياسة إعادة التشغيل - Override restart policy
+    restart: "no"
+    
+    # تجاوز الأمر لتقليل استخدام الموارد - Override command to reduce resource usage
+    command: >
+      redis-server
+      --appendonly no
+      --save ""
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
+    
+    # إذا أردت تعطيل Redis بالكامل في التطوير، استخدم:
+    # If you want to completely disable Redis in development, use:
+    # profiles:
+    #   - with-redis
+
+# ==============================================================================
+# ملاحظات التطوير - Development Notes
+# ==============================================================================
+#
+# 1. Hot Reload:
+#    - التطبيق يُعيد التشغيل تلقائياً عند تغيير الملفات
+#    - Application automatically restarts when files change
+#    - يستخدم Gunicorn مع --reload للتطوير
+#
+# 2. قاعدة البيانات - Database:
+#    - يستخدم SQLite المحفوظ محلياً في ./data/db/dev_database.db
+#    - Uses SQLite stored locally in ./data/db/dev_database.db
+#    - لا حاجة لـ PostgreSQL في التطوير
+#
+# 3. الأمان - Security:
+#    - إعدادات الأمان مخففة للتطوير
+#    - Security settings are relaxed for development
+#    - لا تستخدم هذه الإعدادات في الإنتاج
+#
+# 4. التصحيح - Debugging:
+#    - وضع التصحيح مُفعَّل (FLASK_DEBUG=1)
+#    - Debug mode is enabled (FLASK_DEBUG=1)
+#    - المنفذ 5678 متاح لـ Python debugger
+#
+# 5. الأداء - Performance:
+#    - Bind mount قد يكون بطيئاً على Windows/Mac
+#    - Consider using delegated/cached mount options if needed
+#    - Redis يستخدم ذاكرة أقل (128MB)
+#
+# 6. الأوامر المفيدة - Useful Commands:
+#    - docker-compose up                    # تشغيل التطوير
+#    - docker-compose logs -f app           # عرض سجلات التطبيق
+#    - docker-compose exec app bash         # الدخول إلى حاوية التطبيق
+#    - docker-compose exec app flask shell  # فتح Flask shell
+#    - docker-compose restart app           # إعادة تشغيل التطبيق
+#
+# 7. للتبديل بين البيئات - To Switch Between Environments:
+#    - التطوير: docker-compose up
+#    - الإنتاج: docker-compose -f docker-compose.yml up
+#
+# 8. ملفات مهمة - Important Files:
+#    - .dockerignore: تأكد من استبعاد الملفات غير الضرورية
+#    - .env: يمكن استخدامه لتخزين متغيرات التطوير المحلية
+#    - requirements.txt: يتم تثبيت المكتبات تلقائياً عند البناء
+#
+# ==============================================================================

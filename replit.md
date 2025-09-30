@@ -24,6 +24,7 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
 -   **Configuration Management:** `config_factory.py` provides `BaseConfig`, `DevelopmentConfig`, and `ProductionConfig` classes, with `get_config()` dynamically loading the appropriate settings. `SECRET_KEY` is mandatory in production.
 -   **Environment Detection:** `environment_detector.py` automatically detects Replit vs. VPS environments, with manual override via the `ENVIRONMENT` variable.
 -   **Containerization:** A multi-stage `Dockerfile` is provided for production deployments, utilizing `python:3.12-slim`, Gunicorn with `GeventWebSocketWorker`, and running as a non-root user. Includes health checks and robust handling of dependencies like `pycurl` and `pymssql`.
+-   **Docker Compose:** Complete orchestration setup with `docker-compose.yml` (production) and `docker-compose.override.yml` (development). Includes PostgreSQL 15, Redis 7, persistent volumes, health checks, and automatic environment switching. All secrets managed via `.env` file for security.
 -   **Core Files & Structure:**
     -   `runserver.py`: Application entry point, now fully integrated with `config_factory`.
     -   `BTPanel/`: Core application logic.
@@ -42,3 +43,41 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
 -   **Reverse Proxy/Web Server:** Nginx (for production environments on VPS)
 -   **Process Management:** systemd (for production environments on VPS)
 -   **Containerization:** Docker
+## آخر التغييرات - Recent Changes
+
+### 30 سبتمبر 2025 - المهمة 2.2: Docker Compose للتطوير ✅
+**المسؤول:** Replit Agent
+
+**ما تم إنجازه:**
+1. ✅ إنشاء `docker-compose.yml` للإنتاج:
+   - خدمة app مع Gunicorn + GeventWebSocketWorker
+   - خدمة PostgreSQL 15-alpine مع health checks
+   - خدمة Redis 7-alpine مع 256MB memory limit
+   - Persistent volumes: postgres_data, redis_data, app_data, app_logs
+   - Network: aapanel_network (bridge)
+   - جميع الإعدادات من ملف .env للأمان
+
+2. ✅ إنشاء `docker-compose.override.yml` للتطوير:
+   - استخدام Gunicorn مع --reload للـ hot reload
+   - SQLite للتطوير (لا حاجة لـ PostgreSQL)
+   - Bind mount للكود (.:/app:cached)
+   - Redis خفيف (128MB، بدون persistence)
+   - منافذ إضافية للـ debugger (5678)
+
+3. ✅ إنشاء `.env.docker.example`:
+   - مرجع شامل لجميع المتغيرات المطلوبة
+   - تعليمات واضحة بالعربية والإنجليزية
+   - أمثلة للتطوير والإنتاج
+   - ملاحظات أمنية مهمة
+
+**التحسينات الأمنية:**
+- جميع الأسرار في ملف .env (غير ملتزم في git)
+- عدم وجود بيانات اعتماد hardcoded
+- استخدام env_file بدلاً من environment inline
+- Postgres healthcheck يستخدم متغيرات البيئة
+
+**الاستخدام:**
+- التطوير: `docker-compose up` (يستخدم override تلقائياً)
+- الإنتاج: `docker-compose -f docker-compose.yml up`
+
+**المراجعة:** Pass من architect - جاهز للإنتاج ✅

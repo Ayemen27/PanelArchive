@@ -1,0 +1,207 @@
+# ==============================================================================
+# Docker Compose Configuration for aaPanel - Production Environment
+# ==============================================================================
+# يوفر هذا الملف إعدادات الإنتاج الكاملة مع PostgreSQL و Redis
+# This file provides complete production setup with PostgreSQL and Redis
+#
+# للتشغيل - To run:
+#   docker-compose up -d
+#
+# للتوقف - To stop:
+#   docker-compose down
+#
+# لعرض السجلات - To view logs:
+#   docker-compose logs -f
+# ==============================================================================
+
+version: '3.8'
+
+# ==============================================================================
+# الخدمات - Services
+# ==============================================================================
+services:
+  
+  # ============================================================================
+  # خدمة التطبيق الرئيسية - Main Application Service
+  # ============================================================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aapanel_app
+    
+    # المنفذ - Port mapping
+    ports:
+      - "5000:5000"
+    
+    # استخدام ملف البيئة - Use environment file
+    env_file:
+      - .env
+    
+    # الاعتماديات - Dependencies
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    
+    # الأحجام - Volumes
+    volumes:
+      # بيانات التطبيق الدائمة - Persistent application data
+      - app_data:/app/data
+      - app_logs:/app/logs
+      # إعدادات الإنتاج - Production configs
+      - ./config:/app/config:ro
+    
+    # الشبكة - Network
+    networks:
+      - aapanel_network
+    
+    # سياسة إعادة التشغيل - Restart policy
+    restart: always
+    
+    # فحص الصحة - Health check
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || curl -f http://localhost:5000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+  
+  # ============================================================================
+  # خدمة قاعدة البيانات - PostgreSQL Database Service
+  # ============================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: aapanel_postgres
+    
+    # استخدام ملف البيئة - Use environment file
+    env_file:
+      - .env
+    
+    # الأحجام - Volumes
+    volumes:
+      # بيانات PostgreSQL الدائمة - Persistent PostgreSQL data
+      - postgres_data:/var/lib/postgresql/data
+      # سكربتات التهيئة (اختياري) - Initialization scripts (optional)
+      # - ./init-scripts:/docker-entrypoint-initdb.d:ro
+    
+    # المنفذ (للوصول الخارجي إذا لزم الأمر) - Port (for external access if needed)
+    # ports:
+    #   - "5432:5432"
+    
+    # الشبكة - Network
+    networks:
+      - aapanel_network
+    
+    # سياسة إعادة التشغيل - Restart policy
+    restart: always
+    
+    # فحص الصحة - Health check
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-aapanel_user} -d $${POSTGRES_DB:-production_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+  
+  # ============================================================================
+  # خدمة Redis - Redis Caching Service
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: aapanel_redis
+    
+    # أوامر إضافية - Additional commands
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    
+    # الأحجام - Volumes
+    volumes:
+      # بيانات Redis الدائمة - Persistent Redis data
+      - redis_data:/data
+    
+    # المنفذ (للوصول الخارجي إذا لزم الأمر) - Port (for external access if needed)
+    # ports:
+    #   - "6379:6379"
+    
+    # الشبكة - Network
+    networks:
+      - aapanel_network
+    
+    # سياسة إعادة التشغيل - Restart policy
+    restart: always
+    
+    # فحص الصحة - Health check
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+# ==============================================================================
+# الأحجام الدائمة - Persistent Volumes
+# ==============================================================================
+volumes:
+  # بيانات PostgreSQL - PostgreSQL data
+  postgres_data:
+    driver: local
+    name: aapanel_postgres_data
+  
+  # بيانات Redis - Redis data
+  redis_data:
+    driver: local
+    name: aapanel_redis_data
+  
+  # بيانات التطبيق - Application data
+  app_data:
+    driver: local
+    name: aapanel_app_data
+  
+  # سجلات التطبيق - Application logs
+  app_logs:
+    driver: local
+    name: aapanel_app_logs
+
+# ==============================================================================
+# الشبكات - Networks
+# ==============================================================================
+networks:
+  aapanel_network:
+    driver: bridge
+    name: aapanel_network
+
+# ==============================================================================
+# ملاحظات مهمة - Important Notes
+# ==============================================================================
+#
+# 1. الأمان - Security:
+#    - غيّر SECRET_KEY في الإنتاج الحقيقي
+#    - غيّر كلمات المرور الافتراضية (POSTGRES_PASSWORD)
+#    - استخدم ملف .env لتخزين المتغيرات الحساسة
+#
+# 2. البيانات الدائمة - Persistent Data:
+#    - جميع البيانات محفوظة في volumes منفصلة
+#    - لحذف البيانات: docker-compose down -v
+#    - لعمل نسخة احتياطية: docker run --rm -v aapanel_postgres_data:/data -v $(pwd):/backup alpine tar czf /backup/backup.tar.gz /data
+#
+# 3. الأداء - Performance:
+#    - Redis مُعَد بـ 256MB ذاكرة كحد أقصى
+#    - PostgreSQL مُحَسَّن لـ UTF-8
+#    - التطبيق يستخدم Gunicorn مع GeventWebSocketWorker
+#
+# 4. المراقبة - Monitoring:
+#    - فحص الصحة يعمل تلقائياً كل 30 ثانية
+#    - لعرض حالة الخدمات: docker-compose ps
+#    - لعرض السجلات: docker-compose logs -f [service_name]
+#
+# 5. التحديثات - Updates:
+#    - لتحديث التطبيق: docker-compose up -d --build app
+#    - لتحديث جميع الخدمات: docker-compose up -d --build
+#
+# ==============================================================================
