@@ -1,0 +1,38 @@
+{
+  "scan_info": {
+    "timestamp": "2025-10-01T16:48:52.083290",
+    "total_reports": 4
+  },
+  "available_reports": {
+    "comprehensive_report": {
+      "file": "comprehensive_security_report.json",
+      "description": "التقرير الرئيسي الشامل",
+      "size": 259
+    },
+    "security_report": {
+      "file": "security_analysis_report.json",
+      "description": "تقرير فحص البيانات الحساسة",
+      "size": 0
+    },
+    "network_report": {
+      "file": "network_analysis_report.json",
+      "description": "تقرير فحص الشبكة والاتصالات",
+      "size": 0
+    },
+    "service_report": {
+      "file": "service_mapping_report.json",
+      "description": "تقرير تحليل الخدمات المرتبطة",
+      "size": 0
+    },
+    "html_summary": {
+      "file": "security_summary.html",
+      "description": "ملخص بصري تفاعلي",
+      "size": 4297
+    }
+  },
+  "instructions": {
+    "view_main_report": "افتح comprehensive_security_report.json",
+    "view_html_summary": "افتح security_summary.html في المتصفح",
+    "access_detailed_reports": "افتح التقارير التفصيلية حسب الحاجة"
+  }
+}

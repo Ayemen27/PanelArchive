@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ملخص فحص الأمان</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            line-height: 1.6; 
+            margin: 20px; 
+            background-color: #f4f4f4; 
+            color: #333; 
+        }
+        .container { 
+            background-color: #fff; 
+            padding: 20px; 
+            border-radius: 8px; 
+            box-shadow: 0 0 10px rgba(0,0,0,0.1); 
+        }
+        h1 { 
+            color: #2c3e50; 
+            border-bottom: 2px solid #3498db; 
+            padding-bottom: 10px;
+        }
+        h2 { 
+            color: #34495e; 
+            margin-top: 20px;
+        }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 15px; 
+        }
+        th, td { 
+            border: 1px solid #ddd; 
+            padding: 10px; 
+            text-align: right; 
+        }
+        th { 
+            background-color: #ecf0f1; 
+            color: #2c3e50; 
+        }
+        tr:nth-child(even) { 
+            background-color: #f9f9f9; 
+        }
+        .report-link { 
+            color: #3498db; 
+            text-decoration: none; 
+        }
+        .report-link:hover { 
+            text-decoration: underline; 
+        }
+        .summary-section { 
+            margin-bottom: 20px; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ملخص فحص الأمان الشامل</h1>
+        <p><strong>وقت الفحص:</strong> 2025-10-01T16:48:52.083290</p>
+        <div class="summary-section">
+            <h2>التقرير الرئيسي</h2>
+            <p>يحتوي هذا التقرير على ملخص لجميع النتائج.</p>
+            <p><a href="comprehensive_security_report.json" class="report-link">فتح التقرير الرئيسي</a></p>
+        </div>
+        <div class="summary-section">
+            <h2>التقارير التفصيلية</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>نوع التقرير</th>
+                        <th>اسم الملف</th>
+                        <th>حجم الملف</th>
+                        <th>الوصف</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Security_analysis</td>
+                        <td><a href="security_analysis_detailed_report.json" class="report-link">security_analysis_detailed_report.json</a></td>
+                        <td>0 بايت</td>
+                        <td>تقرير تفصيلي لنتائج فحص الثغرات الأمنية.</td>
+                    </tr>
+                    <tr>
+                        <td>Network_analysis</td>
+                        <td><a href="network_analysis_detailed_report.json" class="report-link">network_analysis_detailed_report.json</a></td>
+                        <td>0 بايت</td>
+                        <td>تقرير تفصيلي لنتائج فحص الشبكة.</td>
+                    </tr>
+                    <tr>
+                        <td>Service_mapping</td>
+                        <td><a href="service_mapping_detailed_report.json" class="report-link">service_mapping_detailed_report.json</a></td>
+                        <td>0 بايت</td>
+                        <td>تقرير تفصيلي لتحليل الخدمات المرتبطة.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="summary-section">
+            <h2>تعليمات الوصول</h2>
+            <ul>
+                <li>يمكنك فتح التقرير الرئيسي <a href="comprehensive_security_report.json" class="report-link">هنا</a>.</li>
+                <li>يمكنك الوصول إلى التقارير التفصيلية المذكورة أعلاه بالنقر على روابطها.</li>
+                <li>يمكنك فتح هذا الملف (security_summary.html) في متصفحك لرؤية هذا الملخص.</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

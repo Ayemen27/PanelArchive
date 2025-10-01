@@ -334,6 +334,7 @@ class BackupManager:
             # حفظ معلومات النسخة
             info_file = Path(str(backup_path) + '.info')
             with open(info_file, 'w', encoding='utf-8') as f:
+                f.write(f"Format: v2\n")  # Version marker for HMAC enforcement
                 f.write(f"Backup Name: {backup_name}\n")
                 f.write(f"Created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write(f"Environment: {self.config.ENVIRONMENT}\n")
@@ -342,8 +343,6 @@ class BackupManager:
                 f.write(f"HMAC-SHA256: {hmac_hash}\n")
                 f.write(f"Size: {format_size(backup_path.stat().st_size)}\n")
                 f.write(f"Algorithm: SHA-256\n")
-                # للتوافق مع النسخ القديمة (deprecated)
-                f.write(f"MD5: (deprecated - use SHA256)\n")
             
             # حذف المجلد المؤقت
             shutil.rmtree(temp_dir)
@@ -945,13 +944,16 @@ class BackupManager:
                 sha256_found = False
                 hmac_found = False
                 md5_found = False
+                format_version = 'v1'
                 expected_sha256 = ''
                 expected_hmac = ''
                 expected_md5 = ''
                 
                 # محاولة SHA-256 + HMAC (الطريقة الجديدة الآمنة)
                 for line in info_content.split('\n'):
-                    if line.startswith('SHA256:'):
+                    if line.startswith('Format:'):
+                        format_version = line.split(':', 1)[1].strip()
+                    elif line.startswith('SHA256:'):
                         sha256_found = True
                         expected_sha256 = line.split(':', 1)[1].strip()
                     elif line.startswith('HMAC-SHA256:'):
@@ -964,43 +966,77 @@ class BackupManager:
                             md5_found = True
                             expected_md5 = md5_value
                 
-                # التحقق من SHA-256 + HMAC (الأفضل)
-                if sha256_found and hmac_found:
-                    print(f"{Colors.OKCYAN}🔐 جاري التحقق من SHA-256 + HMAC...{Colors.ENDC}")
+                # التحقق من SHA-256 + HMAC (v2 format - مطلوب)
+                if format_version == 'v2':
+                    if not sha256_found or not hmac_found:
+                        print(f"{Colors.FAIL}❌ النسخة v2 تتطلب SHA-256 و HMAC!{Colors.ENDC}")
+                        return
                     
-                    # التحقق من SHA-256
+                    print(f"{Colors.OKCYAN}🔐 جاري التحقق من SHA-256 + HMAC (v2)...{Colors.ENDC}")
+                    
+                    # التحقق من SHA-256 (constant-time comparison)
                     actual_sha256 = calculate_checksum(str(backup_path), algorithm='sha256')
-                    if expected_sha256 != actual_sha256:
+                    if not hmac.compare_digest(expected_sha256, actual_sha256):
                         print(f"{Colors.FAIL}❌ فشل التحقق من SHA-256!{Colors.ENDC}")
-                        print(f"   المتوقع: {expected_sha256}")
-                        print(f"   الفعلي: {actual_sha256}")
+                        print(f"   المتوقع: {expected_sha256[:16]}...")
+                        print(f"   الفعلي: {actual_sha256[:16]}...")
                         return
                     
                     print(f"{Colors.OKGREEN}✓ تم التحقق من SHA-256 بنجاح{Colors.ENDC}")
                     
-                    # التحقق من HMAC
-                    secret_key = self.config.SECRET_KEY or 'fallback-key-for-development'
+                    # التحقق من HMAC (constant-time comparison)
+                    secret_key = self.config.SECRET_KEY
+                    if not secret_key:
+                        print(f"{Colors.FAIL}❌ SECRET_KEY مطلوب للتحقق من HMAC!{Colors.ENDC}")
+                        return
+                    
+                    # رفض المفاتيح الافتراضية الضعيفة في الإنتاج
+                    if self.config.ENVIRONMENT == 'production':
+                        weak_keys = ['fallback-key-for-development', 'dev-secret', 'test-key']
+                        if secret_key in weak_keys or len(secret_key) < 32:
+                            print(f"{Colors.FAIL}❌ SECRET_KEY ضعيف جداً للإنتاج!{Colors.ENDC}")
+                            return
+                    
                     actual_hmac = calculate_hmac(str(backup_path), secret_key, algorithm='sha256')
-                    if expected_hmac != actual_hmac:
+                    if not hmac.compare_digest(expected_hmac, actual_hmac):
                         print(f"{Colors.FAIL}❌ فشل التحقق من HMAC!{Colors.ENDC}")
                         print(f"   الملف قد يكون محرّف أو تم إنشاؤه بـ SECRET_KEY مختلف")
                         return
                     
                     print(f"{Colors.OKGREEN}✓ تم التحقق من HMAC بنجاح (الأصالة مؤكدة){Colors.ENDC}")
                 
-                # fallback لـ MD5 (نسخ قديمة)
-                elif md5_found:
-                    print(f"{Colors.WARNING}⚠️  تحذير: النسخة تستخدم MD5 (deprecated){Colors.ENDC}")
-                    print(f"{Colors.WARNING}   يُوصى بإعادة إنشاء النسخة بـ SHA-256{Colors.ENDC}")
+                # fallback لـ SHA-256 بدون HMAC (v1 مع SHA-256)
+                elif sha256_found and hmac_found:
+                    print(f"{Colors.WARNING}⚠️  تحذير: نسخة قديمة بدون version marker{Colors.ENDC}")
+                    print(f"{Colors.OKCYAN}🔐 جاري التحقق من SHA-256 + HMAC...{Colors.ENDC}")
                     
-                    actual_md5 = calculate_checksum(str(backup_path), algorithm='md5')
-                    if expected_md5 != actual_md5:
-                        print(f"{Colors.FAIL}❌ فشل التحقق من MD5!{Colors.ENDC}")
-                        print(f"   المتوقع: {expected_md5}")
-                        print(f"   الفعلي: {actual_md5}")
+                    actual_sha256 = calculate_checksum(str(backup_path), algorithm='sha256')
+                    if not hmac.compare_digest(expected_sha256, actual_sha256):
+                        print(f"{Colors.FAIL}❌ فشل التحقق من SHA-256!{Colors.ENDC}")
                         return
                     
-                    print(f"{Colors.OKGREEN}✓ تم التحقق من MD5 بنجاح{Colors.ENDC}")
+                    print(f"{Colors.OKGREEN}✓ تم التحقق من SHA-256 بنجاح{Colors.ENDC}")
+                    
+                    secret_key = self.config.SECRET_KEY or 'fallback-key-for-development'
+                    actual_hmac = calculate_hmac(str(backup_path), secret_key, algorithm='sha256')
+                    if hmac.compare_digest(expected_hmac, actual_hmac):
+                        print(f"{Colors.OKGREEN}✓ تم التحقق من HMAC بنجاح{Colors.ENDC}")
+                    else:
+                        print(f"{Colors.WARNING}⚠️  فشل HMAC - قد يكون SECRET_KEY مختلف{Colors.ENDC}")
+                
+                # fallback لـ MD5 (نسخ قديمة جداً - v1 قديم)
+                elif md5_found:
+                    print(f"{Colors.WARNING}⚠️  تحذير: النسخة تستخدم MD5 (deprecated - v1 legacy){Colors.ENDC}")
+                    print(f"{Colors.WARNING}   يُوصى بشدة بإعادة إنشاء النسخة بـ SHA-256 + HMAC{Colors.ENDC}")
+                    
+                    actual_md5 = calculate_checksum(str(backup_path), algorithm='md5')
+                    if not hmac.compare_digest(expected_md5, actual_md5):
+                        print(f"{Colors.FAIL}❌ فشل التحقق من MD5!{Colors.ENDC}")
+                        print(f"   المتوقع: {expected_md5[:16]}...")
+                        print(f"   الفعلي: {actual_md5[:16]}...")
+                        return
+                    
+                    print(f"{Colors.OKGREEN}✓ تم التحقق من MD5 بنجاح (لكن غير آمن!){Colors.ENDC}")
                 
                 # لا يوجد checksum
                 elif not skip_md5:

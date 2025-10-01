@@ -1,0 +1,16 @@
+{
+  "summary": "تم العثور على بعض الثغرات المحتملة.",
+  "vulnerabilities": [
+    {
+      "name": "SQL Injection",
+      "severity": "عالية",
+      "details": "..."
+    },
+    {
+      "name": "XSS",
+      "severity": "متوسطة",
+      "details": "..."
+    }
+  ],
+  "description": "تقرير تفصيلي لنتائج فحص الثغرات الأمنية."
+}

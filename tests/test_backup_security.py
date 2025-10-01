@@ -279,14 +279,17 @@ class TestBackupSecurityResourceLimits(unittest.TestCase):
         """اختبار: رفض عند تجاوز MAX_TOTAL_SIZE"""
         archive_path = self.backup_dir / 'zip_bomb.tar.gz'
         
-        num_files = int(RestoreLimits.MAX_TOTAL_SIZE / RestoreLimits.MAX_FILE_SIZE) + 2
+        # استخدام أحجام أصغر للاختبار السريع
+        test_max_total = 10 * 1024 * 1024  # 10 MB للاختبار
+        test_file_size = 3 * 1024 * 1024   # 3 MB لكل ملف
+        num_files = 5  # 5 ملفات × 3 MB = 15 MB (يتجاوز 10 MB)
         
         with tarfile.open(archive_path, 'w:gz') as tar:
             for i in range(num_files):
                 info = tarfile.TarInfo(name=f'backup/data/file{i}.db')
-                info.size = RestoreLimits.MAX_FILE_SIZE
+                info.size = test_file_size
                 import io
-                content = b'x' * RestoreLimits.MAX_FILE_SIZE
+                content = b'x' * test_file_size
                 tar.addfile(info, io.BytesIO(content))
         
         stats = {
@@ -297,14 +300,23 @@ class TestBackupSecurityResourceLimits(unittest.TestCase):
             'rejected_reasons': {}
         }
         
-        with tarfile.open(archive_path, 'r:gz') as tar:
-            members = tar.getmembers()
-            for member in members:
-                self.manager._safe_extract_member(
-                    member, tar, Path(self.test_dir) / 'restore', stats
-                )
+        # محاكاة الحد الأقصى الأصغر مؤقتاً
+        original_max = RestoreLimits.MAX_TOTAL_SIZE
+        RestoreLimits.MAX_TOTAL_SIZE = test_max_total
+        
+        try:
+            with tarfile.open(archive_path, 'r:gz') as tar:
+                members = tar.getmembers()
+                for member in members:
+                    self.manager._safe_extract_member(
+                        member, tar, Path(self.test_dir) / 'restore', stats
+                    )
+        finally:
+            # استعادة القيمة الأصلية
+            RestoreLimits.MAX_TOTAL_SIZE = original_max
         
         self.assertGreater(stats['rejected'], 0, "يجب رفض ملفات عند تجاوز الحد الإجمالي")
+        self.assertIn('تجاوز الحد الإجمالي', str(stats['rejected_reasons']))
     
     def test_reject_excessive_depth(self):
         """اختبار: رفض مسارات بعمق زائد"""
