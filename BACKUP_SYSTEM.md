@@ -389,18 +389,20 @@ df -h | grep /opt/aapanel
 
 ### المشكلة: فشل التحقق من HMAC
 
-**السبب:** SECRET_KEY مختلف عن الذي استُخدم عند إنشاء النسخة
+**السبب:** SECRET_KEY مختلف عن الذي استُخدم عند إنشاء النسخة (v2)
 
 **الحل:**
 ```bash
 # 1. تحقق من SECRET_KEY الحالي
 cat .env | grep SECRET_KEY
 
-# 2. إذا كنت متأكداً من صحة النسخة، استخدم --skip-md5 (خطر!)
-python backups/backup_manager.py --restore backup.tar.gz --skip-md5
+# 2. استرجع SECRET_KEY القديم الذي استُخدم لإنشاء النسخة (الحل الموصى به)
 
-# 3. أو استرجع SECRET_KEY القديم
+# 3. للنسخ القديمة (v1 - MD5) فقط: استخدم --skip-md5 (خطر!)
+python backups/backup_manager.py --restore legacy_backup.tar.gz --skip-md5
 ```
+
+> **⚠️ ملاحظة:** --skip-md5 يُستخدم فقط للنسخ القديمة (v1) التي تستخدم MD5. النسخ الجديدة (v2) تتطلب SECRET_KEY صحيح.
 
 ### المشكلة: رفض ملفات أثناء الاسترجاع
 
