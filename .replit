@@ -14,3 +14,12 @@ author = 48181137
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "Python3 runserver.py "
+
+[[workflows.workflow]]
+name = "Security Scan"
+author = 48189038
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python3 run_all_scans.py"
