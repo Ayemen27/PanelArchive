@@ -90,13 +90,14 @@ Dir usage analysis
 
 ### 🔐 Backup System (SHA-256 + HMAC)
 Secure backup and restore system with advanced protection:
-- **SHA-256 + HMAC** for integrity and authenticity
+- **SHA-256 + HMAC** for integrity and authenticity verification
+- **Backward Compatible** with legacy MD5 backups (restore-only)
 - **Path Traversal Protection** against Zip Slip attacks
 - **Resource Limits** to prevent Zip Bomb
 - **Automatic Scheduling** with cron/systemd
 
 ```bash
-# Create backup
+# Create backup (v2 format with SHA-256 + HMAC)
 python backups/backup_manager.py
 
 # List backups
@@ -104,9 +105,14 @@ python backups/backup_manager.py --list
 
 # Restore backup
 python backups/backup_manager.py --restore backup_file.tar.gz
+
+# Restore legacy MD5 backup (v1 format)
+python backups/backup_manager.py --restore legacy_backup.tar.gz --skip-md5
 ```
 
-📖 Full documentation: [BACKUP_SYSTEM.md](BACKUP_SYSTEM.md)
+📖 Full documentation: 
+- [Backup System Guide](backups/README.md)
+- [Deployment Secrets & SECRET_KEY](DEPLOYMENT_SECRETS.md)
 
 ### 🔵🟢 Blue-Green Deployment
 Zero-downtime deployment strategy:
