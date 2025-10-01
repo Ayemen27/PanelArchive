@@ -254,7 +254,7 @@ class BackupManager:
             md5_hash = calculate_md5(str(backup_path))
             
             # حفظ معلومات النسخة
-            info_file = backup_path.with_suffix('.tar.gz.info')
+            info_file = Path(str(backup_path) + '.info')
             with open(info_file, 'w', encoding='utf-8') as f:
                 f.write(f"Backup Name: {backup_name}\n")
                 f.write(f"Created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
@@ -582,7 +582,7 @@ class BackupManager:
             for backup in to_delete:
                 try:
                     backup_path = Path(backup['path'])
-                    info_path = backup_path.with_suffix('.tar.gz.info')
+                    info_path = Path(str(backup_path) + '.info')
                     
                     backup_path.unlink()
                     if info_path.exists():
@@ -604,7 +604,7 @@ class BackupManager:
         backups = []
         
         for backup_file in sorted(self.backup_dir.glob('backup_*.tar.gz'), reverse=True):
-            info_file = backup_file.with_suffix('.tar.gz.info')
+            info_file = Path(str(backup_file) + '.info')
             
             backup_info = {
                 'name': backup_file.name,
