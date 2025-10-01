@@ -687,13 +687,14 @@ class BackupManager:
         else:
             print(f"\n{Colors.WARNING}❌ تم الإلغاء{Colors.ENDC}\n")
     
-    def restore_backup(self, backup_file: str, force: bool = False):
+    def restore_backup(self, backup_file: str, force: bool = False, skip_md5: bool = False):
         """
         استرجاع نسخة احتياطية
         
         Args:
             backup_file: مسار ملف النسخة الاحتياطية
             force: تخطي التأكيد اليدوي (افتراضي: False)
+            skip_md5: تخطي التحقق من MD5 (غير آمن، افتراضي: False)
         """
         backup_path = Path(backup_file)
         
@@ -716,11 +717,20 @@ class BackupManager:
         
         try:
             # التحقق من MD5
-            info_file = backup_path.with_suffix('.tar.gz.info')
+            info_file = Path(str(backup_path) + '.info')
+            
+            # fallback للملفات القديمة
+            if not info_file.exists():
+                legacy_info = backup_path.with_suffix('.tar.gz.info')
+                if legacy_info.exists():
+                    info_file = legacy_info
+            
             if info_file.exists():
                 with open(info_file, 'r') as f:
+                    md5_found = False
                     for line in f:
                         if line.startswith('MD5:'):
+                            md5_found = True
                             expected_md5 = line.split(':', 1)[1].strip()
                             actual_md5 = calculate_md5(str(backup_path))
                             
@@ -731,15 +741,60 @@ class BackupManager:
                                 return
                             
                             print(f"{Colors.OKGREEN}✓ تم التحقق من MD5 بنجاح{Colors.ENDC}")
+                    
+                    if not md5_found and not skip_md5:
+                        print(f"{Colors.FAIL}❌ ملف .info لا يحتوي على MD5 checksum{Colors.ENDC}")
+                        print(f"   استخدم --skip-md5 لتخطي التحقق (غير آمن)")
+                        return
+            else:
+                if not skip_md5:
+                    print(f"{Colors.FAIL}❌ ملف .info غير موجود - لا يمكن التحقق من سلامة النسخة{Colors.ENDC}")
+                    print(f"   استخدم --skip-md5 لتخطي التحقق (غير آمن)")
+                    return
+                else:
+                    print(f"{Colors.WARNING}⚠️  تحذير: تم تخطي التحقق من MD5 (--skip-md5){Colors.ENDC}")
             
-            # استخراج الملفات
+            # استخراج الملفات بشكل آمن
             restore_dir = Path('restore_temp')
             restore_dir.mkdir(exist_ok=True)
             
             print(f"\n{Colors.OKCYAN}📦 جاري استخراج الملفات...{Colors.ENDC}")
             
             with tarfile.open(backup_path, 'r:gz') as tar:
-                tar.extractall(restore_dir)
+                # التحقق من أمان الملفات قبل الاستخراج
+                safe_members = []
+                restore_dir_resolved = restore_dir.resolve()
+                
+                for member in tar.getmembers():
+                    # منع المسارات المطلقة
+                    if member.name.startswith('/'):
+                        raise ValueError(f"رفض مسار مطلق غير آمن: {member.name}")
+                    
+                    # منع path traversal (..)
+                    if '..' in Path(member.name).parts:
+                        raise ValueError(f"رفض path traversal غير آمن: {member.name}")
+                    
+                    # منع symlinks, hardlinks, وملفات خاصة
+                    if member.issym():
+                        raise ValueError(f"رفض symlink غير آمن: {member.name}")
+                    if member.islnk():
+                        raise ValueError(f"رفض hardlink غير آمن: {member.name}")
+                    if member.ischr() or member.isblk():
+                        raise ValueError(f"رفض device file غير آمن: {member.name}")
+                    if member.isfifo() or member.isdev():
+                        raise ValueError(f"رفض special file غير آمن: {member.name}")
+                    
+                    # التأكد من أن الملف داخل restore_dir (robust check)
+                    target_path = (restore_dir / member.name).resolve()
+                    try:
+                        target_path.relative_to(restore_dir_resolved)
+                    except ValueError:
+                        raise ValueError(f"رفض مسار خارج restore_dir: {member.name}")
+                    
+                    safe_members.append(member)
+                
+                # استخراج آمن للملفات المعتمدة فقط
+                tar.extractall(restore_dir, members=safe_members)
             
             print(f"{Colors.OKGREEN}✅ تم الاسترجاع بنجاح!{Colors.ENDC}")
             print(f"📁 الملفات المستخرجة في: {restore_dir}\n")
@@ -779,6 +834,8 @@ def main():
                        help='استرجاع نسخة احتياطية من ملف')
     parser.add_argument('--force', action='store_true',
                        help='تخطي التأكيد اليدوي (مع --restore)')
+    parser.add_argument('--skip-md5', action='store_true',
+                       help='تخطي التحقق من MD5 (غير آمن)')
     parser.add_argument('--no-color', action='store_true',
                        help='تعطيل الألوان في الإخراج')
     
@@ -798,7 +855,7 @@ def main():
     elif args.cleanup:
         manager.cleanup_all()
     elif args.restore:
-        manager.restore_backup(args.restore, force=args.force)
+        manager.restore_backup(args.restore, force=args.force, skip_md5=args.skip_md5)
     elif args.keep:
         print(f"\n{Colors.OKGREEN}✅ تم تعيين عدد النسخ المحفوظة إلى: {args.keep}{Colors.ENDC}\n")
         manager.display_backups()
