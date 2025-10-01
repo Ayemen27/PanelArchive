@@ -133,7 +133,16 @@ print_header "فحص البروتوكولات"
 
 # Check TLS versions
 for protocol in ssl3 tls1 tls1_1 tls1_2 tls1_3; do
-    if echo | openssl s_client -"$protocol" -servername "$DOMAIN" -connect "$DOMAIN:$PORT" 2>/dev/null | grep -q "Protocol.*$protocol"; then
+    # Map protocol name to OpenSSL format (e.g., tls1_2 -> TLSv1.2)
+    case $protocol in
+        ssl3) PROTOCOL_PATTERN="SSLv3" ;;
+        tls1) PROTOCOL_PATTERN="TLSv1" ;;
+        tls1_1) PROTOCOL_PATTERN="TLSv1.1" ;;
+        tls1_2) PROTOCOL_PATTERN="TLSv1.2" ;;
+        tls1_3) PROTOCOL_PATTERN="TLSv1.3" ;;
+    esac
+    
+    if echo | openssl s_client -"$protocol" -servername "$DOMAIN" -connect "$DOMAIN:$PORT" 2>/dev/null | grep -qi "Protocol.*$PROTOCOL_PATTERN"; then
         case $protocol in
             ssl3|tls1|tls1_1)
                 check_item "$protocol مُفعّل (غير آمن!)" "fail"
