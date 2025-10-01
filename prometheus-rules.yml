@@ -1,0 +1,201 @@
+# ==============================================================================
+# Prometheus Alert Rules for aaPanel
+# ==============================================================================
+# قواعد التنبيه لمراقبة aaPanel
+# يتم تقييم هذه القواعد بشكل دوري بواسطة Prometheus
+# ==============================================================================
+
+groups:
+  # ============================================================================
+  # مجموعة تنبيهات استخدام الموارد - Resource Usage Alerts
+  # ============================================================================
+  - name: resource_usage
+    interval: 30s
+    rules:
+      
+      # CPU Usage Alerts
+      - alert: HighCPUUsage
+        expr: aapanel_cpu_percent > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: aapanel
+          category: resources
+        annotations:
+          summary: "High CPU usage detected on aaPanel"
+          description: "CPU usage is {{ $value }}% (threshold: 80%) for more than 5 minutes on {{ $labels.instance }}"
+          impact: "Application performance may be degraded"
+          action: "Check running processes and consider scaling resources"
+      
+      - alert: CriticalCPUUsage
+        expr: aapanel_cpu_percent > 95
+        for: 5m
+        labels:
+          severity: critical
+          service: aapanel
+          category: resources
+        annotations:
+          summary: "Critical CPU usage detected on aaPanel"
+          description: "CPU usage is {{ $value }}% (threshold: 95%) for more than 5 minutes on {{ $labels.instance }}"
+          impact: "Application may become unresponsive"
+          action: "URGENT: Investigate immediately and scale resources"
+      
+      # Memory Usage Alerts
+      - alert: HighMemoryUsage
+        expr: aapanel_memory_percent > 90
+        for: 5m
+        labels:
+          severity: warning
+          service: aapanel
+          category: resources
+        annotations:
+          summary: "High memory usage detected on aaPanel"
+          description: "Memory usage is {{ $value }}% (threshold: 90%) for more than 5 minutes on {{ $labels.instance }}"
+          impact: "Risk of out-of-memory errors"
+          action: "Check for memory leaks and consider increasing memory allocation"
+      
+      - alert: CriticalMemoryUsage
+        expr: aapanel_memory_percent > 95
+        for: 5m
+        labels:
+          severity: critical
+          service: aapanel
+          category: resources
+        annotations:
+          summary: "Critical memory usage detected on aaPanel"
+          description: "Memory usage is {{ $value }}% (threshold: 95%) for more than 5 minutes on {{ $labels.instance }}"
+          impact: "Application may crash due to out-of-memory"
+          action: "URGENT: Restart application or increase memory immediately"
+      
+      # Disk Usage Alerts
+      - alert: HighDiskUsage
+        expr: aapanel_disk_percent > 85
+        for: 1m
+        labels:
+          severity: warning
+          service: aapanel
+          category: resources
+        annotations:
+          summary: "High disk usage detected on aaPanel"
+          description: "Disk usage is {{ $value }}% (threshold: 85%) on {{ $labels.instance }}"
+          impact: "Limited disk space may affect operations"
+          action: "Clean up old logs and temporary files, or expand disk capacity"
+      
+      - alert: CriticalDiskUsage
+        expr: aapanel_disk_percent > 95
+        for: 1m
+        labels:
+          severity: critical
+          service: aapanel
+          category: resources
+        annotations:
+          summary: "Critical disk usage detected on aaPanel"
+          description: "Disk usage is {{ $value }}% (threshold: 95%) on {{ $labels.instance }}"
+          impact: "Application may fail to write data"
+          action: "URGENT: Free up disk space immediately or expand storage"
+  
+  # ============================================================================
+  # مجموعة تنبيهات توفر الخدمة - Service Availability Alerts
+  # ============================================================================
+  - name: service_availability
+    interval: 30s
+    rules:
+      
+      # Application Down Alert
+      - alert: ApplicationDown
+        expr: up{job="aapanel"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: aapanel
+          category: availability
+        annotations:
+          summary: "aaPanel application is down"
+          description: "The aaPanel application on {{ $labels.instance }} has been unreachable for more than 1 minute"
+          impact: "Service is completely unavailable to users"
+          action: "URGENT: Check application logs and restart if necessary"
+      
+      # Database Health Alerts
+      - alert: DatabaseUnhealthy
+        expr: aapanel_db_healthy == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: aapanel
+          category: database
+        annotations:
+          summary: "Database connection is unhealthy"
+          description: "PostgreSQL database is unreachable or unhealthy for more than 2 minutes on {{ $labels.instance }}"
+          impact: "Application cannot access data, users may see errors"
+          action: "URGENT: Check database status, connection pool, and network connectivity"
+      
+      # Redis Health Alerts
+      - alert: RedisUnhealthy
+        expr: aapanel_redis_healthy == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: aapanel
+          category: cache
+        annotations:
+          summary: "Redis connection is unhealthy"
+          description: "Redis cache is unreachable or unhealthy for more than 2 minutes on {{ $labels.instance }}"
+          impact: "Caching unavailable, performance may be significantly degraded"
+          action: "URGENT: Check Redis status, connection settings, and network connectivity"
+  
+  # ============================================================================
+  # مجموعة تنبيهات الأداء - Performance Alerts
+  # ============================================================================
+  - name: performance
+    interval: 30s
+    rules:
+      
+      # Database Response Time Alert
+      - alert: HighDatabaseResponseTime
+        expr: aapanel_db_response_time > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: aapanel
+          category: performance
+        annotations:
+          summary: "High database response time detected"
+          description: "Database response time is {{ $value }}s (threshold: 5s) for more than 5 minutes on {{ $labels.instance }}"
+          impact: "Slow application performance, degraded user experience"
+          action: "Check database queries, indexes, and connection pool settings"
+      
+      # High Query Failure Rate
+      - alert: HighDatabaseFailureRate
+        expr: (aapanel_db_failed_queries / aapanel_db_total_queries) * 100 > 5
+        for: 3m
+        labels:
+          severity: warning
+          service: aapanel
+          category: database
+        annotations:
+          summary: "High database query failure rate"
+          description: "Database query failure rate is {{ $value }}% (threshold: 5%) on {{ $labels.instance }}"
+          impact: "Users may experience errors and data inconsistencies"
+          action: "Check database logs for errors and connection pool health"
+
+# ==============================================================================
+# ملاحظات مهمة - Important Notes
+# ==============================================================================
+#
+# 1. تقييم القواعد - Rule Evaluation:
+#    - يتم تقييم القواعد كل 30 ثانية
+#    - يمكن تخصيص interval لكل مجموعة
+#
+# 2. حالات التنبيه - Alert States:
+#    - Pending: التنبيه في طور التفعيل (ينتظر for duration)
+#    - Firing: التنبيه نشط ويتم إرساله
+#    - Resolved: المشكلة تم حلها
+#
+# 3. تخصيص القواعد - Customization:
+#    - يمكن تعديل thresholds حسب احتياجاتك
+#    - يمكن تعديل for duration حسب البيئة
+#
+# 4. اختبار القواعد - Testing Rules:
+#    promtool check rules prometheus-rules.yml
+#
+# ==============================================================================

@@ -1,0 +1,227 @@
+# ==============================================================================
+# Alertmanager Configuration for aaPanel
+# ==============================================================================
+# تكوين Alertmanager لإدارة وإرسال التنبيهات
+# يدعم Slack و Email notifications
+# ==============================================================================
+
+# ==============================================================================
+# الإعدادات العامة - Global Configuration
+# ==============================================================================
+global:
+  # وقت حل التنبيه - Time after which an alert is declared resolved
+  resolve_timeout: 5m
+  
+  # SMTP Configuration (for email alerts)
+  smtp_from: '${ALERT_EMAIL_FROM}'
+  smtp_smarthost: '${SMTP_HOST}:${SMTP_PORT}'
+  smtp_auth_username: '${SMTP_USERNAME}'
+  smtp_auth_password: '${SMTP_PASSWORD}'
+  smtp_require_tls: ${SMTP_STARTTLS_ENABLE:-true}
+
+# ==============================================================================
+# Templates (اختياري - يمكن إضافة قوالب مخصصة)
+# ==============================================================================
+# templates:
+#   - '/etc/alertmanager/templates/*.tmpl'
+
+# ==============================================================================
+# Route Tree - شجرة توجيه التنبيهات
+# ==============================================================================
+route:
+  # المستقبل الافتراضي - Default receiver for all alerts
+  receiver: 'slack'
+  
+  # تجميع التنبيهات - Group alerts by these labels
+  group_by: ['service', 'alertname']
+  
+  # انتظار قبل إرسال التنبيه الأول - Wait before sending first notification
+  group_wait: 30s
+  
+  # انتظار قبل إرسال تحديثات للمجموعة - Wait before sending updates for a group
+  group_interval: 5m
+  
+  # انتظار قبل إعادة إرسال نفس التنبيه - Wait before resending same alert
+  repeat_interval: 12h
+  
+  # ===========================================================================
+  # Routes الفرعية - Child Routes
+  # ===========================================================================
+  routes:
+    # Critical alerts → Email + Slack
+    - match:
+        severity: critical
+      receiver: 'email-critical'
+      group_wait: 10s
+      group_interval: 5m
+      repeat_interval: 4h
+      continue: true  # أيضاً أرسل إلى slack (default receiver)
+    
+    # Warning alerts → Slack only (default)
+    - match:
+        severity: warning
+      receiver: 'slack'
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+    
+    # Database specific alerts → مسار خاص
+    - match_re:
+        category: ^(database|cache)$
+      receiver: 'slack'
+      group_by: ['service', 'alertname', 'category']
+      group_wait: 1m
+      repeat_interval: 6h
+
+# ==============================================================================
+# Receivers - مستقبلي التنبيهات
+# ==============================================================================
+receivers:
+  
+  # ==========================================================================
+  # Slack Receiver - إشعارات Slack
+  # ==========================================================================
+  - name: 'slack'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#alerts'
+        username: 'aaPanel Alertmanager'
+        icon_emoji: ':warning:'
+        
+        # عنوان الإشعار - Notification title
+        title: '{{ if eq .Status "firing" }}🚨{{ else }}✅{{ end }} [{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+        
+        # نص الإشعار - Notification text
+        text: >-
+          {{ range .Alerts }}
+            *Alert:* {{ .Labels.alertname }}
+            *Severity:* {{ .Labels.severity }}
+            *Service:* {{ .Labels.service }}
+            *Description:* {{ .Annotations.description }}
+            {{ if .Annotations.action }}*Action:* {{ .Annotations.action }}{{ end }}
+          {{ end }}
+        
+        # ألوان حسب الحالة - Colors based on status
+        color: '{{ if eq .Status "firing" }}{{ if eq .CommonLabels.severity "critical" }}danger{{ else }}warning{{ end }}{{ else }}good{{ end }}'
+        
+        # إرسال عند الحل أيضاً - Send notification when resolved
+        send_resolved: true
+  
+  # ==========================================================================
+  # Email Receiver for Critical Alerts - إشعارات البريد الإلكتروني
+  # ==========================================================================
+  - name: 'email-critical'
+    email_configs:
+      - to: '${ALERT_EMAIL_TO}'
+        from: '${ALERT_EMAIL_FROM}'
+        
+        # عنوان البريد - Email subject
+        headers:
+          Subject: '[CRITICAL] aaPanel Alert: {{ .CommonLabels.alertname }}'
+        
+        # محتوى البريد - Email body (HTML)
+        html: |
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <style>
+              body { font-family: Arial, sans-serif; }
+              .alert { padding: 15px; margin: 10px 0; border-radius: 5px; }
+              .critical { background-color: #f8d7da; border: 1px solid #f5c6cb; }
+              .resolved { background-color: #d4edda; border: 1px solid #c3e6cb; }
+              .label { font-weight: bold; }
+            </style>
+          </head>
+          <body>
+            <h2>{{ if eq .Status "firing" }}🚨 Critical Alert Firing{{ else }}✅ Alert Resolved{{ end }}</h2>
+            {{ range .Alerts }}
+            <div class="alert {{ if eq .Status "firing" }}critical{{ else }}resolved{{ end }}">
+              <p><span class="label">Alert:</span> {{ .Labels.alertname }}</p>
+              <p><span class="label">Severity:</span> {{ .Labels.severity }}</p>
+              <p><span class="label">Service:</span> {{ .Labels.service }}</p>
+              <p><span class="label">Instance:</span> {{ .Labels.instance }}</p>
+              <p><span class="label">Description:</span> {{ .Annotations.description }}</p>
+              {{ if .Annotations.impact }}<p><span class="label">Impact:</span> {{ .Annotations.impact }}</p>{{ end }}
+              {{ if .Annotations.action }}<p><span class="label">Action Required:</span> {{ .Annotations.action }}</p>{{ end }}
+              <p><span class="label">Started At:</span> {{ .StartsAt.Format "2006-01-02 15:04:05" }}</p>
+              {{ if .EndsAt }}<p><span class="label">Ended At:</span> {{ .EndsAt.Format "2006-01-02 15:04:05" }}</p>{{ end }}
+            </div>
+            {{ end }}
+            <hr>
+            <p><small>This is an automated alert from aaPanel Alertmanager</small></p>
+          </body>
+          </html>
+        
+        # إرسال عند الحل - Send notification when resolved
+        send_resolved: true
+        
+        # متطلبات TLS - TLS requirements
+        require_tls: ${SMTP_STARTTLS_ENABLE:-true}
+
+# ==============================================================================
+# Inhibition Rules - قواعد تثبيط التنبيهات
+# ==============================================================================
+# تمنع إرسال تنبيهات warning عندما يكون هناك critical alert من نفس الخدمة
+inhibit_rules:
+  
+  # Critical alerts تثبط Warning alerts
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['service', 'alertname']
+  
+  # Critical CPU يثبط High CPU
+  - source_match:
+      alertname: 'CriticalCPUUsage'
+    target_match:
+      alertname: 'HighCPUUsage'
+    equal: ['service', 'instance']
+  
+  # Critical Memory يثبط High Memory
+  - source_match:
+      alertname: 'CriticalMemoryUsage'
+    target_match:
+      alertname: 'HighMemoryUsage'
+    equal: ['service', 'instance']
+  
+  # Critical Disk يثبط High Disk
+  - source_match:
+      alertname: 'CriticalDiskUsage'
+    target_match:
+      alertname: 'HighDiskUsage'
+    equal: ['service', 'instance']
+  
+  # Application Down يثبط جميع التنبيهات الأخرى
+  - source_match:
+      alertname: 'ApplicationDown'
+    target_match_re:
+      alertname: '^(High|Critical).*'
+    equal: ['service', 'instance']
+
+# ==============================================================================
+# ملاحظات مهمة - Important Notes
+# ==============================================================================
+#
+# 1. متغيرات البيئة - Environment Variables:
+#    - يجب تعريف المتغيرات في ملف .env
+#    - استخدم .env.alerting.example كمرجع
+#
+# 2. اختبار التكوين - Testing Configuration:
+#    amtool check-config alertmanager.yml
+#
+# 3. Slack Webhook:
+#    - احصل على webhook URL من: https://api.slack.com/messaging/webhooks
+#    - أضفه إلى .env كـ SLACK_WEBHOOK_URL
+#
+# 4. SMTP Configuration:
+#    - Gmail: smtp.gmail.com:587 (يتطلب App Password)
+#    - SendGrid: smtp.sendgrid.net:587
+#    - Mailgun: smtp.mailgun.org:587
+#
+# 5. الأمان - Security:
+#    - لا تضع credentials مباشرة في هذا الملف
+#    - استخدم متغيرات البيئة دائماً
+#    - احمِ ملف .env (لا تشاركه في git)
+#
+# ==============================================================================

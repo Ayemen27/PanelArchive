@@ -168,12 +168,15 @@ services:
     volumes:
       # ملف التكوين - Configuration file
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Alert rules - قواعد التنبيه
+      - ./prometheus-rules.yml:/etc/prometheus/rules/prometheus-rules.yml:ro
       # بيانات Prometheus الدائمة - Persistent Prometheus data
       - prometheus_data:/prometheus
     
     # الاعتماديات - Dependencies
     depends_on:
       - app
+      - alertmanager
     
     # الشبكة - Network
     networks:
@@ -247,6 +250,50 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+  
+  # ============================================================================
+  # خدمة Alertmanager - Alert Management Service
+  # ============================================================================
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: aapanel_alertmanager
+    
+    # أوامر إضافية - Additional commands
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--config.expand-env=true'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+    
+    # المنافذ - Ports (قم بإزالة هذا في الإنتاج واستخدم nginx reverse proxy)
+    ports:
+      - "9093:9093"
+    
+    # الأحجام - Volumes
+    volumes:
+      # ملف التكوين - Configuration file
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      # بيانات Alertmanager الدائمة - Persistent Alertmanager data
+      - alertmanager_data:/alertmanager
+    
+    # استخدام ملف البيئة - Use environment file
+    env_file:
+      - .env
+    
+    # الشبكة - Network
+    networks:
+      - aapanel_network
+    
+    # سياسة إعادة التشغيل - Restart policy
+    restart: always
+    
+    # فحص الصحة - Health check
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
 # ==============================================================================
 # الأحجام الدائمة - Persistent Volumes
@@ -281,6 +328,11 @@ volumes:
   grafana_data:
     driver: local
     name: aapanel_grafana_data
+  
+  # بيانات Alertmanager - Alertmanager data
+  alertmanager_data:
+    driver: local
+    name: aapanel_alertmanager_data
 
 # ==============================================================================
 # الشبكات - Networks

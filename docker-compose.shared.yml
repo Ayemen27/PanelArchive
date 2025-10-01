@@ -104,7 +104,13 @@ services:
     # Volumes
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Alert rules - قواعد التنبيه
+      - ./prometheus-rules.yml:/etc/prometheus/rules/prometheus-rules.yml:ro
       - prometheus_data_shared:/prometheus
+    
+    # Dependencies
+    depends_on:
+      - alertmanager-shared
     
     # Network (with alias for datasource compatibility)
     networks:
@@ -172,6 +178,50 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+  
+  # ============================================================================
+  # Shared Alertmanager - Alert Management Service
+  # ============================================================================
+  alertmanager-shared:
+    image: prom/alertmanager:latest
+    container_name: aapanel_alertmanager_shared
+    
+    # Commands
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--config.expand-env=true'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+    
+    # Ports (قم بإزالة هذا في الإنتاج واستخدم nginx reverse proxy)
+    ports:
+      - "9093:9093"
+    
+    # Volumes
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data_shared:/alertmanager
+    
+    # Environment file
+    env_file:
+      - .env
+    
+    # Network (with alias for datasource compatibility)
+    networks:
+      aapanel_network:
+        aliases:
+          - alertmanager  # Allow Prometheus to connect via alertmanager:9093
+    
+    # Restart policy
+    restart: always
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
 # ==============================================================================
 # Persistent Volumes
@@ -196,6 +246,11 @@ volumes:
   grafana_data_shared:
     driver: local
     name: aapanel_grafana_data_shared
+  
+  # Shared Alertmanager data
+  alertmanager_data_shared:
+    driver: local
+    name: aapanel_alertmanager_data_shared
 
 # ==============================================================================
 # Networks
