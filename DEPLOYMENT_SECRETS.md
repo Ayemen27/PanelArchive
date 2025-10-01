@@ -186,13 +186,20 @@ echo "SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')" >
 
 #### ⚠️ Backup System Impact
 
-The backup system uses SECRET_KEY for HMAC verification:
+The backup system uses SECRET_KEY for HMAC-SHA256 verification:
 
 **Format v2 (Current - SHA-256 + HMAC):**
-- ✅ Strong integrity protection
-- ✅ Authenticity verification
-- ❌ **CRITICAL**: Changing SECRET_KEY will invalidate all existing backups!
+- ✅ Strong integrity protection with SHA-256 checksum
+- ✅ Authenticity verification with HMAC-SHA256
+- ✅ Backward compatibility with legacy MD5 backups (deprecated)
+- ❌ **CRITICAL**: Changing SECRET_KEY will invalidate all v2 backups!
 - ❌ **CRITICAL**: Weak keys rejected in production
+- ℹ️ Legacy MD5 backups can still be restored with `--skip-md5` flag
+
+**Migration from v1 (MD5) to v2 (SHA-256+HMAC):**
+- Old backups with MD5 checksums are supported for restoration
+- New backups automatically use SHA-256 + HMAC for enhanced security
+- No manual migration needed - the system handles both formats
 
 **Best Practice:**
 1. Generate strong SECRET_KEY during initial setup
