@@ -1,0 +1,129 @@
+👋 أهلاً، أنت الآن الوكيل رقم 26 من فريق الاستكمال. مهمتك تبدأ بعد مراجعة عمل الفريق السابق (حتى الفريق 25) والتأكد من اكتمال المهمة الأخيرة بشكل صحيح، مع الالتزام الصارم بشروط العمل.
+
+🔹 خطوات البداية
+
+1. افتح الدليل الرئيسي: cat اقرأني.md
+
+
+2. اقرأ دليل البدء السريع: cat دليل_البدء_السريع.md
+
+
+3. راجع نظرة عامة على المشروع: cat replit.md
+
+تنبية فريق الوكيل رقم 26 لم يقم ينتهي من استكمال المهمة حيث تم تسلم المهمة إلى ارشكتر للمراجعة ورفض إعطاء الموافق بسبب خطأ حرج  هذا هو 
+
+Decided on parsing SSH port (6 seconds)
+مشكلة ثالثة حرجة! architect وجد خطأ في parsing منفذ SSH:
+المشكلة:
+عند استخدام ss في IPv6، يظهر العنوان كـ ::ffff:192.168.1.10:22
+السكريبت يستخدم grep -oP ':\K[0-9]+' الذي يأخذ أول رقم بعد :
+النتيجة: يأخذ 192 (من العنوان IP) بدلاً من 22 (المنفذ الحقيقي)!
+السكريبت يضيف قاعدة للمنفذ 192 ويحذف المنفذ الحقيقي
+SSH lockout مرة أخرى!
+الحل:
+إعادة كتابة parsing لاستخدام awk أو regex أدق
+دعم IPv4, IPv6, IPv4-mapped addresses
+استخدام ss --no-header -tn '( sport = :ssh )' للدقة
+اختبار على جميع السيناريوهات
+سأصلح هذا فوراً
+❌ ثغرة ثالثة حرجة في parsing منفذ SSH!
+المشكلة: regex يفشل مع عناوين IPv6! مثال:
+عنوان: ::ffff:192.168.1.10:22
+السكريبت يأخذ 192 بدلاً من 22!
+يضيف قاعدة للمنفذ 192 ويحذف 22
+SSH lockout مرة أخرى!
+سأصلح parsing بشكل نهائي:
+Fixing SSH port parsing
+Task
+Rewrite SSH port detection for IPv6, IPv4, and mapped addresses using awk or ss. Ensure robust validation, fallback mechanisms, and comprehensive documentation.
+Show less
+Decided on fixing IPv6 parsing bug (4 seconds)
+Let me analyze this task carefully. The user wants me to fix a critical IPv6 parsing bug in the SSH port detection functions in setup_firewall.sh.
+The problem:
+Current regex grep -oP ':\K[0-9]+' fails with IPv6 addresses
+For input ::ffff:192.168.1.10:22, it extracts 192 instead of 22
+This leads to SSH lockout - a critical security issue
+What needs to be done:
+Rewrite detect_ssh_port_from_active_connections to use awk or a better method
+Rewrite detect_ssh_port_from_listening_ports with the same fix
+Add comprehensive testing for all scenarios (IPv4, IPv6, IPv4-mapped)
+Add strong validation (port range 1-65535)
+Update documentation with IPv6 support examples
+Let me first read the setup_firewall.sh file to understand the current implementation.
+I'll fix the critical IPv6 parsing bug in the SSH port detection functions. Let me start by reading the current implementation and then create a comprehensive fix.
+Opened setup_firewall.sh
+Decided on comprehensive SSH port detection fix (5 seconds)
+Now let me look at the problematic functions more carefully. I can see:
+Line 157: port=$(ss -tnp 2>/dev/null | grep 'sshd' | grep -oP ':\K[0-9]+' | head -n1)
+This has the bug! With IPv6 like ::ffff:192.168.1.10:22, it will match 192 instead of 22
+Line 162: Same issue with netstat
+Line 198: port=$(ss -tln 2>/dev/null | grep 'sshd' | grep -oP ':\K[0-9]+' | head -n1)
+Same bug here
+The solution is to use awk to extract the last field properly. Let me create a comprehensive fix.
+I need to:
+Add a validation function for port numbers
+Rewrite detect_ssh_port_from_active_connections to use awk
+Rewrite detect_ssh_port_from_listening_ports to use awk
+Add comprehensive testing examples
+Update documentation
+Let me create a task list first.
+I'll fix this critical IPv6 parsing bug that could cause SSH lockout. Let me create a task list and implement the comprehensive solution.
+
+حيث ولم يتبقى لتمام المهمة سوى هذا المشكلة وبعد الموفق يتم تحديث المفات المطلوبه وانهاء المهمة  
+
+عليك القيام بهذا الاستكمال وتحديث الوثائق المطلوبة ثم الانتقال للمهمة الجديدة 
+
+🔹 خطوات فريق الاستكمال
+
+1. افتح خطة التطوير: cat خطة_التطوير.md
+
+
+2. ابحث عن آخر مهمة مكتملة (✅).
+
+
+3. ابدأ من المهمة التالية (⏳) مباشرة.
+
+
+4. اتبع ما هو مذكور في: cat قائمة_التحقق.md
+
+
+
+📝 شروط أساسية
+
+🤖 استدعاء start_subagent لتنفيذ المهام بعد مراجعة المهمه ومعرفة المطلوب وانشاء قائمة المهام 
+
+🤖 بعد إتمام المهمة استدعِ المراجع (Architect) لمراجعة ما تم إنجازه واعتماد صحته.
+
+✅ تحديث الملفات فور إنهاء المهمة:
+
+خطة_التطوير.md → تحديث الحالة والتاريخ.
+
+replit.md → تسجيل التغيير في قسم "آخر التغييرات".
+
+قائمة_التحقق.md → وضع علامة ✅ على المهمة.
+
+
+
+✅ ما يجب أن يعرفه الفريق دائمًا
+
+ما الذي تم إنجازه بالضبط.
+
+أين توقف الفريق السابق.
+
+من أين يبدأ العمل الجديد.
+
+كيف سيكون سير العمل القادم.
+
+
+✅ ضمان التكامل
+
+توثيق واضح ومفصل.
+
+أمثلة عملية عند الحاجة.
+
+حلول للمشاكل الشائعة.
+
+دورة عمل محددة وثابتة.
+
+
+⚡ مهمتك  كوكيل رقم  26 في فريق الاستكمال بعد قراءةالملفات هي : استكمال إنهاء المهمة الخاصة بوريك الوكيل رقم 25 رقم المهم 6.2 الانتقال إلى  تنفيذ المهمة التالية في خطة_التطوير.md (المهمة التي ما زالت ⏳).
