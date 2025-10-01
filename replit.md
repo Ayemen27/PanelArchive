@@ -43,7 +43,7 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
 
 ## 📊 حالة المشروع الحالية
 
-### التقدم الإجمالي: 69% (4 مراحل كاملة من أصل 7)
+### التقدم الإجمالي: 73% (4 مراحل كاملة + مهمة واحدة من المرحلة 5)
 
 #### ✅ المرحلة 1: البنية التحتية - مكتملة 100%
 - ✅ environment_detector.py (14 اختبار بنسبة نجاح 100%)
@@ -73,8 +73,8 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
 - ✅ استراتيجية النسخ الاحتياطي (مكتمل - الوكيل 12، محدّث إلى SHA-256 + HMAC)
 - ✅ Database Connection Pooling (مكتمل - الوكيل 14)
 
-#### ⏳ المرحلة 5: المراقبة - لم تبدأ
-- [ ] Health & Readiness Endpoints
+#### ⏳ المرحلة 5: المراقبة - 25% مكتملة
+- ✅ Health & Readiness Endpoints (مكتمل - الوكيل 20)
 - [ ] Prometheus & Grafana
 - [ ] نظام التنبيهات
 - [ ] Centralized Logging
@@ -92,6 +92,21 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
 
 ## 📝 آخر التغييرات
 
+### 2025-10-01 (الوكيل رقم 20)
+**المهمة 5.1: Health & Readiness Endpoints - مكتملة ✅**
+- ✅ إنشاء health_endpoints.py (177 سطر) مع 3 endpoints:
+  - `/health/live` - Liveness probe (200 OK دائماً)
+  - `/health/ready` - Readiness probe (DB + Redis، يرجع 200/503)
+  - `/health/metrics` - Prometheus metrics (system + DB + Redis)
+- ✅ تكامل كامل مع config_factory و db_pool و psutil
+- ✅ اختبارات شاملة: tests/test_health.py (8 اختبارات)
+- ✅ الاختبارات المستقلة: 100% نجاح
+- ✅ تسجيل Blueprint في BTPanel/__init__.py (السطران 6536-6537)
+- ✅ إنشاء pyrightconfig.json لحل 213 خطأ LSP
+- ✅ موافقة architect: **PASS**
+- 📊 التقدم الإجمالي: 69% → 73%
+- 📍 **المهمة التالية: المرحلة 5.2 - Prometheus & Grafana Setup**
+
 ### 2025-10-01 (الوكيل رقم 14)
 **المهمة 4.3: Database Connection Pooling - مكتملة ✅**
 - ✅ إصلاح 11 خطأ LSP في db_pool.py (type checking)
@@ -103,7 +118,6 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
 - ✅ اختبارات شاملة: health check + connection test + pool status
 - ✅ موافقة architect: **PASS**
 - 📊 التقدم الإجمالي: 63% → 69%
-- 📍 **المهمة التالية: المرحلة 5.1 - Health & Readiness Endpoints**
 
 ### 2025-10-01 (الوكيل رقم 13)
 **تحديث التوثيق والملفات:**
@@ -193,7 +207,7 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
 - ✅ المهمة 3.4 (Blue-Green Deployment)
 
 ## 🎯 المهمة التالية
-**المرحلة 5.1: Health & Readiness Endpoints**
-- الأولوية: عالية
-- المدة المتوقعة: 2-3 ساعات
-- المتطلبات: نقاط نهاية صحة التطبيق، readiness checks، liveness probes، integration with monitoring
+**المرحلة 5.2: Prometheus & Grafana Setup**
+- الأولوية: متوسطة
+- المدة المتوقعة: 4-5 ساعات
+- المتطلبات: تثبيت Prometheus، إعداد Grafana dashboards، تجميع metrics من /health/metrics
