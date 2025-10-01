@@ -23,3 +23,12 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python3 run_all_scans.py"
+
+[[workflows.workflow]]
+name = "فحص أمني شامل"
+author = 48189038
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd فحص && python3 run_all_scans.py"
