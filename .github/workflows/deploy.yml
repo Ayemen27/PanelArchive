@@ -49,6 +49,119 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
+      # ==================== الخطوة 2.5: التحقق من المتغيرات الحرجة ====================
+      - name: Validate critical environment variables
+        run: |
+          echo "🔍 Validating critical environment variables..."
+          VALIDATION_FAILED=0
+          
+          # التحقق من متغيرات GitHub Secrets
+          if [ -z "${{ secrets.VPS_HOST }}" ]; then
+            echo "❌ VPS_HOST is not set in GitHub secrets"
+            VALIDATION_FAILED=1
+          else
+            echo "✅ VPS_HOST is set"
+          fi
+          
+          if [ -z "${{ secrets.VPS_USER }}" ]; then
+            echo "❌ VPS_USER is not set in GitHub secrets"
+            VALIDATION_FAILED=1
+          else
+            echo "✅ VPS_USER is set"
+          fi
+          
+          if [ -z "${{ secrets.VPS_SSH_KEY }}" ]; then
+            echo "❌ VPS_SSH_KEY is not set in GitHub secrets"
+            VALIDATION_FAILED=1
+          else
+            echo "✅ VPS_SSH_KEY is set"
+          fi
+          
+          if [ -z "${{ secrets.VPS_DOMAIN }}" ]; then
+            echo "❌ VPS_DOMAIN is not set in GitHub secrets"
+            VALIDATION_FAILED=1
+          else
+            echo "✅ VPS_DOMAIN is set"
+          fi
+          
+          # التحقق من SECRET_KEY على VPS
+          echo ""
+          echo "🔍 Validating SECRET_KEY on VPS..."
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+          
+          cd ${{ env.DEPLOY_PATH }}
+          
+          # التحقق من وجود .env (إلزامي للإنتاج)
+          if [ ! -f .env ]; then
+            if [ "${{ github.event.inputs.environment || 'production' }}" = "production" ]; then
+              echo "❌ .env file not found on VPS for production deployment"
+              echo "   Production deployments require pre-configured .env with SECRET_KEY"
+              exit 1
+            else
+              echo "⚠️  .env file not found - will be created during staging deployment"
+              exit 0
+            fi
+          fi
+          
+          # استخراج SECRET_KEY من .env
+          SECRET_KEY=$(grep '^SECRET_KEY=' .env 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | xargs)
+          
+          if [ -z "$SECRET_KEY" ]; then
+            echo "❌ SECRET_KEY is not set in .env"
+            exit 1
+          fi
+          
+          # التحقق من طول SECRET_KEY
+          SECRET_KEY_LENGTH=${#SECRET_KEY}
+          if [ $SECRET_KEY_LENGTH -lt 32 ]; then
+            echo "❌ SECRET_KEY is too short: $SECRET_KEY_LENGTH chars (minimum: 32)"
+            exit 1
+          fi
+          
+          # رفض placeholder values
+          if echo "$SECRET_KEY" | grep -qE '(your-secret|change.*me|example|test.*secret|placeholder|xxx+|aaa+)'; then
+            echo "❌ SECRET_KEY appears to be a placeholder value"
+            exit 1
+          fi
+          
+          echo "✅ SECRET_KEY is valid ($SECRET_KEY_LENGTH chars)"
+          
+          # التحقق من DATABASE للإنتاج فقط
+          if [ "${{ github.event.inputs.environment || 'production' }}" = "production" ]; then
+            # استخراج DATABASE_URI و DATABASE_URL من .env
+            DATABASE_URI=$(grep '^DATABASE_URI=' .env 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | xargs)
+            DATABASE_URL=$(grep '^DATABASE_URL=' .env 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | xargs)
+            
+            if [ -z "$DATABASE_URI" ] && [ -z "$DATABASE_URL" ]; then
+              echo "⚠️  DATABASE_URI/DATABASE_URL not set (SQLite will be used)"
+              echo "   ℹ️  Production typically requires PostgreSQL or MySQL"
+            else
+              echo "✅ Database connection is configured"
+            fi
+          fi
+          
+          exit 0
+          ENDSSH
+          
+          # فحص نتيجة SSH
+          SSH_RESULT=$?
+          if [ $SSH_RESULT -ne 0 ]; then
+            echo "❌ VPS environment validation failed"
+            VALIDATION_FAILED=1
+          fi
+          
+          # الخروج بفشل إذا فشل أي فحص
+          if [ $VALIDATION_FAILED -eq 1 ]; then
+            echo ""
+            echo "❌ Environment validation failed! Deployment aborted."
+            exit 1
+          fi
+          
+          echo ""
+          echo "✅ All critical environment variables validated successfully!"
+
       # ==================== الخطوة 3: حفظ التكوين الحالي ====================
       - name: Backup current configuration
         run: |
