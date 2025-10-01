@@ -16,6 +16,8 @@ hook_import()
 # from .routes.v2 import *
 
 import logging
+import logging.config
+import logging.handlers
 import sys
 import json
 import os
@@ -25,6 +27,134 @@ import re
 import uuid
 import psutil
 import zipfile
+
+# ==============================================================================
+# Structured JSON Logging Configuration
+# ==============================================================================
+
+class JSONFormatter(logging.Formatter):
+    """
+    Custom JSON formatter for structured logging compatible with Loki/Promtail
+    """
+    def format(self, record):
+        log_data = {
+            'timestamp': self.formatTime(record, '%Y-%m-%d %H:%M:%S'),
+            'level': record.levelname,
+            'logger': record.name,
+            'message': record.getMessage(),
+            'module': record.module,
+            'function': record.funcName,
+            'line': record.lineno,
+        }
+        
+        if record.exc_info:
+            log_data['exception'] = self.formatException(record.exc_info)
+        
+        if hasattr(record, 'extra'):
+            log_data.update(record.extra)
+        
+        return json.dumps(log_data, ensure_ascii=False)
+
+
+def setup_logging():
+    """
+    Setup structured logging with JSON format for Loki integration
+    Reads configuration from environment variables
+    """
+    log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+    log_format = os.getenv('LOG_FORMAT', 'json').lower()
+    log_file = os.getenv('LOG_FILE', '/app/logs/app.log')
+    log_max_bytes = int(os.getenv('LOG_MAX_BYTES', '10485760'))
+    log_backup_count = int(os.getenv('LOG_BACKUP_COUNT', '5'))
+    log_to_console = os.getenv('LOG_TO_CONSOLE', 'true').lower() == 'true'
+    log_to_file = os.getenv('LOG_TO_FILE', 'true').lower() == 'true'
+    
+    log_dir = os.path.dirname(log_file)
+    if log_dir and not os.path.exists(log_dir):
+        try:
+            os.makedirs(log_dir, exist_ok=True)
+        except Exception as e:
+            print(f"Warning: Could not create log directory {log_dir}: {e}")
+    
+    handlers = []
+    
+    if log_to_console:
+        console_handler = logging.StreamHandler(sys.stdout)
+        if log_format == 'json':
+            console_handler.setFormatter(JSONFormatter())
+        else:
+            console_handler.setFormatter(
+                logging.Formatter(
+                    '%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S'
+                )
+            )
+        handlers.append(console_handler)
+    
+    if log_to_file:
+        try:
+            file_handler = logging.handlers.RotatingFileHandler(
+                log_file,
+                maxBytes=log_max_bytes,
+                backupCount=log_backup_count,
+                encoding='utf-8'
+            )
+            if log_format == 'json':
+                file_handler.setFormatter(JSONFormatter())
+            else:
+                file_handler.setFormatter(
+                    logging.Formatter(
+                        '%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S'
+                    )
+                )
+            handlers.append(file_handler)
+        except Exception as e:
+            print(f"Warning: Could not setup file logging to {log_file}: {e}")
+    
+    logging_config = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'handlers': {
+            'default': {
+                'level': log_level,
+                'class': 'logging.StreamHandler',
+                'stream': 'ext://sys.stdout',
+            }
+        },
+        'root': {
+            'level': log_level,
+            'handlers': handlers if handlers else ['default']
+        }
+    }
+    
+    if handlers:
+        root_logger = logging.getLogger()
+        root_logger.setLevel(getattr(logging, log_level))
+        
+        for handler in root_logger.handlers[:]:
+            root_logger.removeHandler(handler)
+        
+        for handler in handlers:
+            handler.setLevel(getattr(logging, log_level))
+            root_logger.addHandler(handler)
+        
+        root_logger.info(
+            f"Structured logging initialized: level={log_level}, "
+            f"format={log_format}, file={log_file if log_to_file else 'disabled'}"
+        )
+    else:
+        logging.basicConfig(level=getattr(logging, log_level))
+
+try:
+    setup_logging()
+except Exception as e:
+    print(f"Warning: Failed to setup structured logging: {e}")
+    logging.basicConfig(level=logging.INFO)
+
+# ==============================================================================
+# End of Logging Configuration
+# ==============================================================================
 
 # Use dynamic panel path instead of hardcoded /www/server/panel
 panel_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

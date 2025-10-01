@@ -156,7 +156,9 @@ services:
     volumes:
       - grafana_data_shared:/var/lib/grafana
       - ./grafana-dashboard-aapanel.json:/var/lib/grafana/dashboards/aapanel.json:ro
-      - ./grafana-datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
+      # Datasources provisioning - Prometheus & Loki
+      - ./grafana-datasource.yml:/etc/grafana/provisioning/datasources/prometheus.yml:ro
+      - ./grafana-loki-datasource.yml:/etc/grafana/provisioning/datasources/loki.yml:ro
       - ./grafana-dashboard-provisioning.yml:/etc/grafana/provisioning/dashboards/dashboard.yml:ro
     
     # Dependencies
@@ -222,6 +224,75 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+  
+  # ============================================================================
+  # Shared Loki - Centralized Logging Service
+  # ============================================================================
+  loki-shared:
+    image: grafana/loki:2.9.0
+    container_name: aapanel_loki_shared
+    
+    # Loki is internal-only for security. Access via Grafana.
+    # No external port binding - accessible only within Docker network
+    
+    # Volumes
+    volumes:
+      - ./loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data_shared:/tmp/loki
+    
+    # Commands
+    command: -config.file=/etc/loki/local-config.yaml
+    
+    # Network (with alias for datasource compatibility)
+    networks:
+      aapanel_network:
+        aliases:
+          - loki  # Allow Grafana and Promtail to connect via http://loki:3100
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3100/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+  
+  # ============================================================================
+  # Shared Promtail - Log Collection Service
+  # ============================================================================
+  promtail-shared:
+    image: grafana/promtail:2.9.0
+    container_name: aapanel_promtail_shared
+    
+    # Volumes
+    volumes:
+      - ./promtail-config.yml:/etc/promtail/config.yml:ro
+      # Docker container logs
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      # Docker socket for container metadata enrichment (read-only)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # System logs
+      - /var/log:/var/log:ro
+      # Positions file
+      - promtail_positions_shared:/tmp
+    
+    # Commands
+    command: -config.file=/etc/promtail/config.yml
+    
+    # Dependencies
+    depends_on:
+      loki-shared:
+        condition: service_healthy
+    
+    # Network
+    networks:
+      - aapanel_network
+    
+    # Restart policy
+    restart: unless-stopped
 
 # ==============================================================================
 # Persistent Volumes
@@ -251,6 +322,16 @@ volumes:
   alertmanager_data_shared:
     driver: local
     name: aapanel_alertmanager_data_shared
+  
+  # Shared Loki data
+  loki_data_shared:
+    driver: local
+    name: aapanel_loki_data_shared
+  
+  # Shared Promtail positions
+  promtail_positions_shared:
+    driver: local
+    name: aapanel_promtail_positions_shared
 
 # ==============================================================================
 # Networks

@@ -226,8 +226,9 @@ services:
       - grafana_data:/var/lib/grafana
       # Dashboards التلقائية - Auto-provisioned dashboards
       - ./grafana-dashboard-aapanel.json:/var/lib/grafana/dashboards/aapanel.json:ro
-      # Datasource provisioning
-      - ./grafana-datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
+      # Datasources provisioning - Prometheus & Loki
+      - ./grafana-datasource.yml:/etc/grafana/provisioning/datasources/prometheus.yml:ro
+      - ./grafana-loki-datasource.yml:/etc/grafana/provisioning/datasources/loki.yml:ro
       # Dashboard provisioning
       - ./grafana-dashboard-provisioning.yml:/etc/grafana/provisioning/dashboards/dashboard.yml:ro
     
@@ -294,6 +295,78 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+  
+  # ============================================================================
+  # خدمة Loki - Centralized Logging Service
+  # ============================================================================
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: aapanel_loki
+    
+    # Loki is internal-only for security. Access via Grafana.
+    # No external port binding - accessible only within Docker network
+    
+    # الأحجام - Volumes
+    volumes:
+      # ملف التكوين - Configuration file
+      - ./loki-config.yml:/etc/loki/local-config.yaml:ro
+      # بيانات Loki الدائمة - Persistent Loki data
+      - loki_data:/tmp/loki
+    
+    # أوامر إضافية - Additional commands
+    command: -config.file=/etc/loki/local-config.yaml
+    
+    # الشبكة - Network
+    networks:
+      - aapanel_network
+    
+    # سياسة إعادة التشغيل - Restart policy
+    restart: unless-stopped
+    
+    # فحص الصحة - Health check
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3100/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+  
+  # ============================================================================
+  # خدمة Promtail - Log Collection Service
+  # ============================================================================
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: aapanel_promtail
+    
+    # الأحجام - Volumes
+    volumes:
+      # ملف التكوين - Configuration file
+      - ./promtail-config.yml:/etc/promtail/config.yml:ro
+      # Application logs - سجلات التطبيق
+      - app_logs:/app/logs:ro
+      # Docker container logs - سجلات حاويات Docker
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      # Docker socket for container metadata enrichment (read-only)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # System logs - سجلات النظام (اختياري)
+      - /var/log:/var/log:ro
+      # Positions file - ملف المواضع
+      - promtail_positions:/tmp
+    
+    # أوامر إضافية - Additional commands
+    command: -config.file=/etc/promtail/config.yml
+    
+    # الاعتماديات - Dependencies
+    depends_on:
+      loki:
+        condition: service_healthy
+    
+    # الشبكة - Network
+    networks:
+      - aapanel_network
+    
+    # سياسة إعادة التشغيل - Restart policy
+    restart: unless-stopped
 
 # ==============================================================================
 # الأحجام الدائمة - Persistent Volumes
@@ -333,6 +406,16 @@ volumes:
   alertmanager_data:
     driver: local
     name: aapanel_alertmanager_data
+  
+  # بيانات Loki - Loki data
+  loki_data:
+    driver: local
+    name: aapanel_loki_data
+  
+  # Promtail positions - Promtail positions file
+  promtail_positions:
+    driver: local
+    name: aapanel_promtail_positions
 
 # ==============================================================================
 # الشبكات - Networks

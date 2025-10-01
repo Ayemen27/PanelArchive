@@ -1,0 +1,167 @@
+# ==============================================================================
+# Promtail Configuration
+# ==============================================================================
+# Complete Promtail configuration for log collection
+# Version: Promtail 2.9.0
+# ==============================================================================
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: info
+
+# ==============================================================================
+# Positions Configuration - موضع القراءة
+# ==============================================================================
+positions:
+  filename: /tmp/positions.yaml
+
+# ==============================================================================
+# Client Configuration - اتصال Loki
+# ==============================================================================
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+    batchwait: 1s
+    batchsize: 1048576  # 1MB
+    
+    # Retry configuration
+    backoff_config:
+      min_period: 500ms
+      max_period: 5m
+      max_retries: 10
+    
+    # Timeout configuration
+    timeout: 10s
+
+# ==============================================================================
+# Scrape Configurations - تكوينات جمع السجلات
+# ==============================================================================
+scrape_configs:
+  
+  # ============================================================================
+  # Docker Containers Logs - سجلات حاويات Docker
+  # ============================================================================
+  - job_name: docker
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: docker
+          __path__: /var/lib/docker/containers/*/*-json.log
+    
+    # Pipeline stages for Docker logs
+    pipeline_stages:
+      # Extract Docker container metadata from file path
+      - regex:
+          expression: '/var/lib/docker/containers/(?P<container_id>[^/]+)/.*'
+      
+      # Parse Docker JSON log format
+      - json:
+          expressions:
+            stream: stream
+            log: log
+            time: time
+      
+      # Extract container name from Docker metadata
+      - docker:
+          {}
+      
+      # Add timestamp
+      - timestamp:
+          source: time
+          format: RFC3339Nano
+      
+      # Add labels
+      - labels:
+          stream:
+          container_id:
+          container_name:
+      
+      # Output the log content
+      - output:
+          source: log
+  
+  # ============================================================================
+  # Application Logs - سجلات التطبيق
+  # ============================================================================
+  - job_name: aapanel_app
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: aapanel
+          app: btpanel
+          __path__: /app/logs/*.log
+    
+    # Pipeline stages for application logs
+    pipeline_stages:
+      # Extract filename
+      - regex:
+          expression: '/app/logs/(?P<filename>[^/]+)\.log'
+      
+      # Try to parse as JSON first
+      - json:
+          expressions:
+            timestamp: timestamp
+            level: level
+            logger: logger
+            message: message
+            module: module
+            function: function
+            line: line
+      
+      # Add labels from JSON fields
+      - labels:
+          level:
+          logger:
+          filename:
+      
+      # Format timestamp if present
+      - timestamp:
+          source: timestamp
+          format: "2006-01-02 15:04:05"
+      
+      # Template for output
+      - template:
+          source: output
+          template: '{{ .message }}'
+      
+      # Output the formatted log
+      - output:
+          source: output
+  
+  # ============================================================================
+  # System Logs - سجلات النظام (اختياري)
+  # ============================================================================
+  - job_name: syslog
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: syslog
+          __path__: /var/log/syslog
+    
+    pipeline_stages:
+      # Parse syslog format
+      - regex:
+          expression: '^(?P<timestamp>\w+\s+\d+\s+\d+:\d+:\d+)\s+(?P<hostname>\S+)\s+(?P<service>\S+?)(\[(?P<pid>\d+)\])?: (?P<message>.*)$'
+      
+      # Add labels
+      - labels:
+          hostname:
+          service:
+      
+      # Parse timestamp
+      - timestamp:
+          source: timestamp
+          format: "Jan 2 15:04:05"
+      
+      # Output message
+      - output:
+          source: message
+
+# ==============================================================================
+# Target Configuration - تكوين الأهداف
+# ==============================================================================
+target_config:
+  sync_period: 10s

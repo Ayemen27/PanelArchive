@@ -1,0 +1,47 @@
+# ==============================================================================
+# Grafana Loki Datasource Configuration
+# ==============================================================================
+# Auto-provisioned datasource for Loki logs
+# ==============================================================================
+
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    uid: loki
+    
+    # Not the default datasource (Prometheus is default)
+    isDefault: false
+    
+    # Basic settings
+    editable: true
+    version: 1
+    
+    # JSON data configuration
+    jsonData:
+      # Maximum number of lines to display
+      maxLines: 1000
+      
+      # Derived fields (extract values from logs)
+      derivedFields:
+        - datasourceUid: prometheus
+          matcherRegex: "trace_id=(\\w+)"
+          name: TraceID
+          url: "$${__value.raw}"
+        
+        - datasourceUid: loki
+          matcherRegex: "container_name=\"(\\w+)\""
+          name: Container
+          url: ""
+      
+      # Timeout settings
+      timeout: 60
+      
+      # Query settings
+      httpHeaderName1: "X-Scope-OrgID"
+    
+    # Secure JSON data (if auth is needed)
+    secureJsonData: {}
