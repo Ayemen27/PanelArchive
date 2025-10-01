@@ -177,6 +177,24 @@ def safe_remove_file(file_path: str, logger: logging.Logger) -> bool:
     return False
 
 
+# ==================== Security Constants for Restore ====================
+class RestoreLimits:
+    """حدود الأمان لاسترجاع النسخ الاحتياطية - Restore Security Limits"""
+    
+    MAX_TOTAL_SIZE = 2 * 1024 * 1024 * 1024
+    MAX_FILE_SIZE = 100 * 1024 * 1024
+    MAX_FILES = 10000
+    MAX_DEPTH = 10
+    
+    ALLOWED_ROOTS = {
+        'data', 'logs', '.env', 'alembic.ini',
+        'database_sqlite.sql', 'database_postgresql.sql', 'database_mysql.sql'
+    }
+    
+    SAFE_FILE_MODE = 0o640
+    SAFE_DIR_MODE = 0o750
+
+
 # ==================== BackupManager Class ====================
 class BackupManager:
     """
@@ -687,6 +705,136 @@ class BackupManager:
         else:
             print(f"\n{Colors.WARNING}❌ تم الإلغاء{Colors.ENDC}\n")
     
+    def _safe_extract_member(self, member: tarfile.TarInfo, tar: tarfile.TarFile, 
+                            extract_dir: Path, stats: Dict) -> bool:
+        """
+        استخراج ملف بشكل آمن مع فحوصات شاملة
+        
+        Args:
+            member: عضو tar المراد استخراجه
+            tar: كائن tarfile
+            extract_dir: مجلد الاستخراج
+            stats: إحصائيات الاستخراج (mutated)
+        
+        Returns:
+            bool: True إذا نجح الاستخراج، False خلاف ذلك
+        """
+        try:
+            parts = Path(member.name).parts
+            
+            if len(parts) < 2:
+                self.logger.warning(f"رفض: مسار قصير جداً - {member.name}")
+                stats['rejected'] += 1
+                stats['rejected_reasons'][member.name] = 'مسار قصير جداً'
+                return False
+            
+            if parts[0] != 'backup':
+                self.logger.warning(f"رفض: ليس في backup/ - {member.name}")
+                stats['rejected'] += 1
+                stats['rejected_reasons'][member.name] = 'ليس في backup/'
+                return False
+            
+            root_item = parts[1]
+            allowed = False
+            for allowed_root in RestoreLimits.ALLOWED_ROOTS:
+                if root_item == allowed_root or root_item.startswith(allowed_root.rstrip('/') + '/'):
+                    allowed = True
+                    break
+            
+            if not allowed:
+                self.logger.warning(f"رفض: جذر غير مسموح - {member.name} (root={root_item})")
+                stats['rejected'] += 1
+                stats['rejected_reasons'][member.name] = f'جذر غير مسموح: {root_item}'
+                return False
+            
+            if len(parts) > RestoreLimits.MAX_DEPTH:
+                self.logger.warning(f"رفض: عمق زائد - {member.name}")
+                stats['rejected'] += 1
+                stats['rejected_reasons'][member.name] = 'عمق مسار زائد'
+                return False
+            
+            if member.size > RestoreLimits.MAX_FILE_SIZE:
+                self.logger.warning(f"رفض: حجم ملف زائد - {member.name} ({format_size(member.size)})")
+                stats['rejected'] += 1
+                stats['rejected_reasons'][member.name] = f'حجم زائد: {format_size(member.size)}'
+                return False
+            
+            if stats['total_size'] + member.size > RestoreLimits.MAX_TOTAL_SIZE:
+                self.logger.error(f"رفض: تجاوز الحجم الإجمالي - {member.name}")
+                stats['rejected'] += 1
+                stats['rejected_reasons'][member.name] = 'تجاوز الحد الإجمالي'
+                return False
+            
+            if not (member.isfile() or member.isdir()):
+                self.logger.warning(f"رفض: نوع ملف غير آمن - {member.name}")
+                stats['rejected'] += 1
+                stats['rejected_reasons'][member.name] = 'نوع ملف غير آمن'
+                return False
+            
+            target_path = (extract_dir / member.name).resolve()
+            
+            for parent in target_path.parents:
+                if not parent.exists():
+                    continue
+                if parent == extract_dir or parent == extract_dir.parent:
+                    break
+                try:
+                    if parent.is_symlink():
+                        self.logger.error(f"رفض: الأب symlink - {member.name} (parent={parent})")
+                        stats['rejected'] += 1
+                        stats['rejected_reasons'][member.name] = f'أب symlink: {parent}'
+                        return False
+                except OSError:
+                    pass
+            
+            if member.isdir():
+                target_path.mkdir(parents=True, exist_ok=True, mode=RestoreLimits.SAFE_DIR_MODE)
+                stats['accepted'] += 1
+                return True
+            
+            elif member.isfile():
+                target_path.parent.mkdir(parents=True, exist_ok=True, mode=RestoreLimits.SAFE_DIR_MODE)
+                
+                import fcntl
+                try:
+                    fd = os.open(target_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 
+                                RestoreLimits.SAFE_FILE_MODE)
+                except FileExistsError:
+                    self.logger.warning(f"تخطي: الملف موجود - {member.name}")
+                    stats['skipped'] += 1
+                    return False
+                except OSError as e:
+                    self.logger.error(f"رفض: فشل فتح آمن - {member.name}: {e}")
+                    stats['rejected'] += 1
+                    stats['rejected_reasons'][member.name] = f'فشل فتح آمن: {e}'
+                    return False
+                
+                try:
+                    fileobj = tar.extractfile(member)
+                    if fileobj:
+                        written = 0
+                        while written < member.size:
+                            chunk = fileobj.read(8192)
+                            if not chunk:
+                                break
+                            os.write(fd, chunk)
+                            written += len(chunk)
+                        fileobj.close()
+                        
+                        stats['total_size'] += written
+                        stats['accepted'] += 1
+                        return True
+                finally:
+                    os.close(fd)
+            
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"خطأ في استخراج {member.name}: {e}")
+            stats['rejected'] += 1
+            stats['rejected_reasons'][member.name] = f'خطأ: {e}'
+            return False
+    
     def restore_backup(self, backup_file: str, force: bool = False, skip_md5: bool = False):
         """
         استرجاع نسخة احتياطية
@@ -758,49 +906,45 @@ class BackupManager:
             restore_dir = Path('restore_temp')
             restore_dir.mkdir(exist_ok=True)
             
-            print(f"\n{Colors.OKCYAN}📦 جاري استخراج الملفات...{Colors.ENDC}")
+            print(f"\n{Colors.OKCYAN}📦 جاري استخراج الملفات بأمان محسّن...{Colors.ENDC}")
+            
+            stats = {
+                'accepted': 0,
+                'rejected': 0,
+                'skipped': 0,
+                'total_size': 0,
+                'rejected_reasons': {}
+            }
             
             with tarfile.open(backup_path, 'r:gz') as tar:
-                # التحقق من أمان الملفات قبل الاستخراج
-                safe_members = []
-                restore_dir_resolved = restore_dir.resolve()
+                members = tar.getmembers()
                 
-                for member in tar.getmembers():
-                    # منع المسارات المطلقة
-                    if member.name.startswith('/'):
-                        raise ValueError(f"رفض مسار مطلق غير آمن: {member.name}")
-                    
-                    # منع path traversal (..)
-                    if '..' in Path(member.name).parts:
-                        raise ValueError(f"رفض path traversal غير آمن: {member.name}")
-                    
-                    # منع symlinks, hardlinks, وملفات خاصة
-                    if member.issym():
-                        raise ValueError(f"رفض symlink غير آمن: {member.name}")
-                    if member.islnk():
-                        raise ValueError(f"رفض hardlink غير آمن: {member.name}")
-                    if member.ischr() or member.isblk():
-                        raise ValueError(f"رفض device file غير آمن: {member.name}")
-                    if member.isfifo() or member.isdev():
-                        raise ValueError(f"رفض special file غير آمن: {member.name}")
-                    
-                    # التأكد من أن الملف داخل restore_dir (robust check)
-                    target_path = (restore_dir / member.name).resolve()
-                    try:
-                        target_path.relative_to(restore_dir_resolved)
-                    except ValueError:
-                        raise ValueError(f"رفض مسار خارج restore_dir: {member.name}")
-                    
-                    safe_members.append(member)
+                if len(members) > RestoreLimits.MAX_FILES:
+                    raise ValueError(f"عدد الملفات ({len(members)}) يتجاوز الحد الأقصى ({RestoreLimits.MAX_FILES})")
                 
-                # استخراج آمن للملفات المعتمدة فقط
-                tar.extractall(restore_dir, members=safe_members)
+                for member in members:
+                    self._safe_extract_member(member, tar, restore_dir, stats)
             
-            print(f"{Colors.OKGREEN}✅ تم الاسترجاع بنجاح!{Colors.ENDC}")
-            print(f"📁 الملفات المستخرجة في: {restore_dir}\n")
-            print(f"{Colors.WARNING}⚠️  يجب نقل الملفات يدوياً إلى المواقع المناسبة{Colors.ENDC}\n")
+            print(f"\n{Colors.HEADER}{'=' * 70}{Colors.ENDC}")
+            print(f"{Colors.OKGREEN}✅ اكتمل الاسترجاع بأمان!{Colors.ENDC}")
+            print(f"{Colors.HEADER}{'=' * 70}{Colors.ENDC}")
+            print(f"📊 الإحصائيات:")
+            print(f"   ✓ ملفات مقبولة: {stats['accepted']}")
+            print(f"   ✗ ملفات مرفوضة: {stats['rejected']}")
+            print(f"   ⊘ ملفات متخطاة: {stats['skipped']}")
+            print(f"   📦 الحجم الإجمالي: {format_size(stats['total_size'])}")
+            print(f"📁 الملفات المستخرجة في: {restore_dir}")
             
-            self.logger.info(f"تم استرجاع النسخة: {backup_file}")
+            if stats['rejected'] > 0:
+                print(f"\n{Colors.WARNING}⚠️  تحذير: تم رفض {stats['rejected']} ملف للأسباب التالية:{Colors.ENDC}")
+                for path, reason in list(stats['rejected_reasons'].items())[:5]:
+                    print(f"   - {path}: {reason}")
+                if len(stats['rejected_reasons']) > 5:
+                    print(f"   ... و {len(stats['rejected_reasons']) - 5} أخرى")
+            
+            print(f"\n{Colors.WARNING}⚠️  يجب نقل الملفات يدوياً إلى المواقع المناسبة{Colors.ENDC}\n")
+            
+            self.logger.info(f"تم استرجاع النسخة: {backup_file} (مقبول={stats['accepted']}, مرفوض={stats['rejected']})")
             
         except Exception as e:
             self.logger.error(f"فشل الاسترجاع: {e}")
