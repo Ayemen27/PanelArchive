@@ -361,26 +361,106 @@ mkdir -p /etc/fail2ban/filter.d
 
 cat > /etc/fail2ban/filter.d/aapanel.conf <<'EOF'
 # Fail2Ban filter for aaPanel
-# Detects failed login attempts and suspicious activity
+# Detects ONLY failed login attempts and authentication failures
+# 
+# CRITICAL FIX v3: Fixed multi-IP scenarios
+# - Uses pattern ordering: "from IP:" BEFORE "from <HOST>"
+# - Uses [^,]* to prevent crossing commas in multi-IP lines
+# - Correctly extracts attacker IP, not historical IPs
+#
+# Multi-IP examples that work correctly:
+#   "Login failed, last login IP: 10.0.0.5, IP: 192.168.1.100" → 192.168.1.100 ✓
+#   "Login failed from 192.168.1.100, previous from 10.0.0.5" → 192.168.1.100 ✓
+#
+# Covers:
+#   - Login failures (various formats)
+#   - Authentication failures
+#   - Invalid user attempts  
+#   - Unauthorized access attempts
+#   - Different IP notation: "IP:", "ip:", "from", "client:"
 
 [INCLUDES]
 before = common.conf
 
 [Definition]
-failregex = ^.*Login failed.*IP: <HOST>.*$
-            ^.*Authentication failed.*from <HOST>.*$
-            ^.*Failed password.*from <HOST>.*$
-            ^.*Invalid user.*from <HOST>.*$
-            ^.*Unauthorized access.*<HOST>.*$
-            ^.*\[error\].*client: <HOST>.*$
-            ^.*\[notice\].*<HOST>.*"(GET|POST).*" (4[0-9]{2}|5[0-9]{2}).*$
+# PRECISE LOGIN FAILURE PATTERNS - NO CATCH-ALLS!
+# Each pattern requires explicit context (from/ip:/client:) before <HOST>
+# This prevents matching wrong IPs in multi-IP log lines
+
+# Login failed - PRECISE patterns with multi-IP protection
+# Strategy: Match specific patterns where IP context is unambiguous
+# SAFE: "from <HOST>", "client: <HOST>", "username: ..., ip: <HOST>"
+# PROTECTED: "IP: <HOST>" only when NOT preceded by historical keywords
+
+# CRITICAL: Pattern order matters! More specific patterns first
+# "from IP:" MUST come before "from <HOST>" to avoid matching "IP:" as host
+failregex = ^.*[Ll]ogin [Ff]ailed[^,]*[Ff]rom\s+[Ii][Pp]:\s*<HOST>(?:\s|$|,|;)
+            ^.*[Ll]ogin [Ff]ailed[^,]*[Ff]rom\s+<HOST>(?:\s|$|,|;)
+            
+            ^.*[Ll]ogin [Ff]ailed.*client:\s*<HOST>(?:\s|$|,|;)
+            
+            ^.*[Ll]ogin [Ff]ailed.*username:[^,]+,\s*ip:\s*<HOST>(?:\s|$|,|;)
+            ^.*[Ll]ogin [Ff]ailed.*username:[^,]+,\s*ip\(<HOST>\)
+            
+            ^.*[Ll]ogin [Ff]ailed.*,\s*[Ii][Pp]:\s*<HOST>(?:\s|$|,|;)
+            
+            ^.*[Ee]rror:\s*[Ll]ogin [Ff]ailed.*client:\s*<HOST>(?:\s|$|,|;)
+            ^.*[Ee]rror:\s*[Ll]ogin [Ff]ailed.*[Ff]rom\s+<HOST>(?:\s|$|,|;)
+            ^.*[Ee]rror:\s*[Ll]ogin [Ff]ailed.*,\s*[Ii][Pp]:\s*<HOST>(?:\s|$|,|;)
+            
+            ^.*\[error\].*[Ll]ogin.*[Ff]ailed.*[Ff]rom\s+<HOST>(?:\s|$|,|;)
+            ^.*\[error\].*[Ll]ogin.*[Ff]ailed.*client:\s*<HOST>(?:\s|$|,|;)
+            ^.*\[error\].*[Ll]ogin.*[Ff]ailed.*,\s*[Ii][Pp]:\s*<HOST>(?:\s|$|,|;)
+            
+            ^.*[Aa]uthentication [Ff]ailed.*[Ff]rom\s+<HOST>(?:\s|$|,|;)
+            ^.*[Aa]uthentication [Ff]ailed.*,\s*[Ii][Pp]:\s*<HOST>(?:\s|$|,|;)
+            ^.*[Aa]uthentication [Ff]ailed.*client:\s*<HOST>(?:\s|$|,|;)
+            
+            ^.*[Aa]uth [Ff]ailed.*[Ff]rom\s+<HOST>(?:\s|$|,|;)
+            ^.*[Aa]uth [Ff]ailed.*,\s*[Ii][Pp]:\s*<HOST>(?:\s|$|,|;)
+            ^.*[Aa]uth [Ff]ailed.*client:\s*<HOST>(?:\s|$|,|;)
+            
+            ^.*\[error\].*[Aa]uth.*[Ff]ailed.*[Ff]rom\s+<HOST>(?:\s|$|,|;)
+            ^.*\[error\].*[Aa]uth.*[Ff]ailed.*,\s*[Ii][Pp]:\s*<HOST>(?:\s|$|,|;)
+            ^.*\[error\].*[Aa]uth.*[Ff]ailed.*client:\s*<HOST>(?:\s|$|,|;)
+            
+            ^.*[Ff]ailed [Pp]assword.*[Ff]rom\s+<HOST>(?:\s|$|,|;)
+            ^.*[Ff]ailed [Pp]assword.*,\s*[Ii][Pp]:\s*<HOST>(?:\s|$|,|;)
+            ^.*[Ff]ailed [Pp]assword.*client:\s*<HOST>(?:\s|$|,|;)
+            
+            ^.*[Ii]nvalid [Uu]ser.*[Ff]rom\s+<HOST>(?:\s|$|,|;)
+            ^.*[Ii]nvalid [Uu]ser.*,\s*[Ii][Pp]:\s*<HOST>(?:\s|$|,|;)
+            ^.*[Ii]nvalid [Uu]ser.*client:\s*<HOST>(?:\s|$|,|;)
+            
+            ^.*[Uu]nauthorized [Aa]ccess.*[Ff]rom\s+<HOST>(?:\s|$|,|;)
+            ^.*[Uu]nauthorized [Aa]ccess.*,\s*[Ii][Pp]:\s*<HOST>(?:\s|$|,|;)
+            ^.*[Uu]nauthorized [Aa]ccess.*client:\s*<HOST>(?:\s|$|,|;)
+            
+            ^.*[Aa]ccess [Dd]enied.*[Ff]or\s+<HOST>(?:\s|$|,|;)
+            ^.*[Aa]ccess [Dd]enied.*,\s*[Ii][Pp]:\s*<HOST>(?:\s|$|,|;)
+            ^.*[Aa]ccess [Dd]enied.*client:\s*<HOST>(?:\s|$|,|;)
 
 ignoreregex =
 
-# Pattern examples for aaPanel logs:
+# Real aaPanel log pattern examples:
 # 2025-01-01 12:00:00 [error] Login failed for user 'admin' from IP: 192.168.1.100
+# 2025-01-01 12:00:00 [error] Login failed, username: admin, ip: 192.168.1.100
+# 2025-01-01 12:00:00 [error] Login failed, username: admin, ip(192.168.1.100)
+# 2025-01-01 12:00:00 Error: login failed; client: 192.168.1.100
 # 2025-01-01 12:00:00 [notice] Authentication failed from 192.168.1.100
-# 2025-01-01 12:00:00 [error] Failed password for admin from 192.168.1.100 port 12345 ssh2
+# 2025-01-01 12:00:00 [error] Authentication failed, client: 192.168.1.100
+# 2025-01-01 12:00:00 [error] Failed password for admin from 192.168.1.100 port 12345
+# 2025-01-01 12:00:00 [error] Failed password for admin, client: 192.168.1.100
+# 2025-01-01 12:00:00 [error] Invalid user test from 192.168.1.50
+# 2025-01-01 12:00:00 [error] Unauthorized access attempt from 10.0.0.5
+# 2025-01-01 12:00:00 [error] Access denied for 192.168.1.99
+
+# IMPORTANT: Will NOT match generic errors like:
+#   - 404 Not Found
+#   - 500 Internal Server Error
+#   - Database connection errors
+#   - File not found errors
+#   - General nginx errors without authentication keywords
 
 datepattern = ^%%Y-%%m-%%d %%H:%%M:%%S
               {^LN-BEG}

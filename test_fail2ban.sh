@@ -153,6 +153,164 @@ else
     test_warning "aapanel.conf غير موجود"
 fi
 
+# Test 6.1: Test filter accuracy (True Positives) - REAL aaPanel log formats
+test_start "اختبار filter - True Positives (يجب أن يطابق)"
+if [ -f /etc/fail2ban/filter.d/aapanel.conf ]; then
+    TRUE_POSITIVE_COUNT=0
+    TRUE_POSITIVE_TOTAL=17
+    
+    # REAL aaPanel log formats that SHOULD match (actual login failures)
+    TP_SAMPLES=(
+        # Standard formats
+        "2025-01-01 12:00:00 [error] Login failed for user 'admin' from IP: 192.168.1.100"
+        "2025-01-01 12:00:00 [notice] Authentication failed from 192.168.1.100"
+        "2025-01-01 12:00:00 [error] Failed password for admin from 192.168.1.100 port 12345"
+        "2025-01-01 12:00:00 [error] Invalid user test from 192.168.1.50"
+        "2025-01-01 12:00:00 [error] Unauthorized access attempt from 10.0.0.5"
+        
+        # aaPanel-specific formats (username:, ip:, ip())
+        "2025-01-01 12:00:00 [error] Login failed, username: admin, ip: 192.168.1.100"
+        "2025-01-01 12:00:00 [error] Login failed, username: admin, ip(192.168.1.100)"
+        "2025-01-01 12:00:00 Error: login failed; client: 192.168.1.100"
+        "2025-01-01 12:00:00 [error] Authentication failed, client: 192.168.1.101"
+        "2025-01-01 12:00:00 [error] Failed password for admin, client: 192.168.1.102"
+        
+        # CRITICAL: Multi-IP scenarios (must match correct IP)
+        "2025-01-01 12:00:00 [error] Login failed, username: admin, last login IP: 10.0.0.5, IP: 192.168.1.100"
+        "2025-01-01 12:00:00 [error] Login failed from 192.168.1.100, previous login was from 10.0.0.5"
+        
+        # Variations
+        "2025-01-01 12:00:00 [error] login failed from IP: 10.20.30.40"
+        "2025-01-01 12:00:00 [error] Auth failed from 172.16.0.1"
+        "2025-01-01 12:00:00 [error] Auth failed, client: 172.16.0.2"
+        "2025-01-01 12:00:00 [error] Access denied for 192.168.1.99"
+        "2025-01-01 12:00:00 [error] Access denied, client: 192.168.1.98"
+    )
+    
+    for sample in "${TP_SAMPLES[@]}"; do
+        if echo "$sample" | fail2ban-regex - /etc/fail2ban/filter.d/aapanel.conf --print-all-matched >/dev/null 2>&1; then
+            TRUE_POSITIVE_COUNT=$((TRUE_POSITIVE_COUNT + 1))
+        fi
+    done
+    
+    if [ $TRUE_POSITIVE_COUNT -eq $TRUE_POSITIVE_TOTAL ]; then
+        test_pass "جميع login failures تم اكتشافها ($TRUE_POSITIVE_COUNT/$TRUE_POSITIVE_TOTAL)"
+    else
+        test_fail "بعض login failures لم يتم اكتشافها ($TRUE_POSITIVE_COUNT/$TRUE_POSITIVE_TOTAL)"
+        test_info "  تم اكتشاف $TRUE_POSITIVE_COUNT من أصل $TRUE_POSITIVE_TOTAL"
+    fi
+else
+    test_warning "aapanel.conf غير موجود - تخطي الاختبار"
+fi
+
+# Test 6.1.5: CRITICAL - Verify EXACT IP extraction in multi-IP scenarios
+test_start "اختبار استخراج IP الصحيح (CRITICAL Multi-IP)"
+if [ -f /etc/fail2ban/filter.d/aapanel.conf ]; then
+    MULTI_IP_PASS=0
+    MULTI_IP_TOTAL=5
+    
+    # Helper function to extract IP from fail2ban-regex output
+    extract_ip() {
+        local log_line="$1"
+        local output=$(echo "$log_line" | fail2ban-regex - /etc/fail2ban/filter.d/aapanel.conf 2>/dev/null)
+        # Extract IP from "Addresses found:" section
+        echo "$output" | grep -A 20 "Addresses found:" | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -1
+    }
+    
+    # Test Case 1: "last login IP: X, IP: Y" - should extract Y
+    EXTRACTED=$(extract_ip "2025-01-01 12:00:00 [error] Login failed, username: admin, last login IP: 10.0.0.5, IP: 192.168.1.100")
+    if [ "$EXTRACTED" = "192.168.1.100" ]; then
+        test_pass "  ✓ Multi-IP case 1: extracted 192.168.1.100 (correct, not 10.0.0.5)"
+        MULTI_IP_PASS=$((MULTI_IP_PASS + 1))
+    else
+        test_fail "  ✗ Multi-IP case 1: extracted '$EXTRACTED' (expected 192.168.1.100)"
+    fi
+    
+    # Test Case 2: "from X, previous login was from Y" - should extract X
+    EXTRACTED=$(extract_ip "2025-01-01 12:00:00 [error] Login failed from 192.168.1.100, previous login was from 10.0.0.5")
+    if [ "$EXTRACTED" = "192.168.1.100" ]; then
+        test_pass "  ✓ Multi-IP case 2: extracted 192.168.1.100 (correct, not 10.0.0.5)"
+        MULTI_IP_PASS=$((MULTI_IP_PASS + 1))
+    else
+        test_fail "  ✗ Multi-IP case 2: extracted '$EXTRACTED' (expected 192.168.1.100)"
+    fi
+    
+    # Test Case 3: "username: X, ip: Y" - should extract Y
+    EXTRACTED=$(extract_ip "2025-01-01 12:00:00 [error] Login failed, username: admin, ip: 192.168.1.100")
+    if [ "$EXTRACTED" = "192.168.1.100" ]; then
+        test_pass "  ✓ Standard case: extracted 192.168.1.100"
+        MULTI_IP_PASS=$((MULTI_IP_PASS + 1))
+    else
+        test_fail "  ✗ Standard case: extracted '$EXTRACTED' (expected 192.168.1.100)"
+    fi
+    
+    # Test Case 4: "client: X" - should extract X
+    EXTRACTED=$(extract_ip "2025-01-01 12:00:00 Error: login failed; client: 172.16.0.1")
+    if [ "$EXTRACTED" = "172.16.0.1" ]; then
+        test_pass "  ✓ Client format: extracted 172.16.0.1"
+        MULTI_IP_PASS=$((MULTI_IP_PASS + 1))
+    else
+        test_fail "  ✗ Client format: extracted '$EXTRACTED' (expected 172.16.0.1)"
+    fi
+    
+    # Test Case 5: "from IP: X" - should extract X
+    EXTRACTED=$(extract_ip "2025-01-01 12:00:00 [error] login failed from IP: 10.20.30.40")
+    if [ "$EXTRACTED" = "10.20.30.40" ]; then
+        test_pass "  ✓ From IP format: extracted 10.20.30.40"
+        MULTI_IP_PASS=$((MULTI_IP_PASS + 1))
+    else
+        test_fail "  ✗ From IP format: extracted '$EXTRACTED' (expected 10.20.30.40)"
+    fi
+    
+    if [ $MULTI_IP_PASS -eq $MULTI_IP_TOTAL ]; then
+        test_pass "🎯 CRITICAL: جميع multi-IP scenarios تستخرج IP الصحيح ($MULTI_IP_PASS/$MULTI_IP_TOTAL)"
+    else
+        test_fail "🚨 CRITICAL: بعض multi-IP scenarios تستخرج IP خاطئ! ($MULTI_IP_PASS/$MULTI_IP_TOTAL)"
+        test_warning "⚠️  خطر: قد يتم حظر مستخدمين شرعيين!"
+    fi
+else
+    test_warning "aapanel.conf غير موجود - تخطي الاختبار"
+fi
+
+# Test 6.2: Test filter accuracy (False Positives)
+test_start "اختبار filter - False Positives (لا يجب أن يطابق)"
+if [ -f /etc/fail2ban/filter.d/aapanel.conf ]; then
+    FALSE_POSITIVE_COUNT=0
+    FALSE_POSITIVE_TOTAL=10
+    
+    # Test samples that SHOULD NOT match (normal errors + multi-IP lines)
+    FP_SAMPLES=(
+        # Normal errors
+        "2025-01-01 12:00:00 [error] 404 Not Found: /api/users from 192.168.1.200"
+        "2025-01-01 12:00:00 [error] 500 Internal Server Error from 192.168.1.201"
+        "2025-01-01 12:00:00 [notice] 10.0.0.10 \"GET /api/data\" 404"
+        "2025-01-01 12:00:00 [notice] 10.0.0.11 \"POST /api/submit\" 500"
+        "2025-01-01 12:00:00 [error] client: 192.168.1.202 - Database connection failed"
+        "2025-01-01 12:00:00 [error] client: 192.168.1.203 - File not found: /tmp/data.txt"
+        
+        # CRITICAL: Multi-IP scenarios that should NOT match
+        "2025-01-01 12:00:00 [info] Login succeeded from 192.168.1.10, last failed IP: 10.0.0.5"
+        "2025-01-01 12:00:00 [notice] User logged in from 192.168.1.20, previous login 192.168.1.21"
+        "2025-01-01 12:00:00 [info] Session established for 192.168.1.30, referred by 192.168.1.31"
+        "2025-01-01 12:00:00 [notice] Connection from 192.168.1.40 successful (last IP: 192.168.1.41)"
+    )
+    
+    for sample in "${FP_SAMPLES[@]}"; do
+        if ! echo "$sample" | fail2ban-regex - /etc/fail2ban/filter.d/aapanel.conf --print-all-matched >/dev/null 2>&1; then
+            FALSE_POSITIVE_COUNT=$((FALSE_POSITIVE_COUNT + 1))
+        fi
+    done
+    
+    if [ $FALSE_POSITIVE_COUNT -eq $FALSE_POSITIVE_TOTAL ]; then
+        test_pass "لا توجد false positives - جميع الأخطاء العادية تم تجاهلها ($FALSE_POSITIVE_COUNT/$FALSE_POSITIVE_TOTAL)"
+    else
+        test_fail "توجد false positives! بعض الأخطاء العادية تم اكتشافها بالخطأ ($((FALSE_POSITIVE_TOTAL - FALSE_POSITIVE_COUNT))/$FALSE_POSITIVE_TOTAL)"
+        test_warning "⚠️  خطر: المستخدمون الشرعيون قد يتم حظرهم!"
+    fi
+else
+    test_warning "aapanel.conf غير موجود - تخطي الاختبار"
+fi
+
 # Test 7: List active jails
 test_start "التحقق من الـ jails النشطة"
 JAILS_OUTPUT=$(fail2ban-client status 2>/dev/null)
