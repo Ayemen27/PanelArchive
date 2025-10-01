@@ -43,7 +43,7 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
 
 ## 📊 حالة المشروع الحالية
 
-### التقدم الإجمالي: 73% (4 مراحل كاملة + مهمة واحدة من المرحلة 5)
+### التقدم الإجمالي: 77% (4 مراحل كاملة + مهمتان من المرحلة 5)
 
 #### ✅ المرحلة 1: البنية التحتية - مكتملة 100%
 - ✅ environment_detector.py (14 اختبار بنسبة نجاح 100%)
@@ -73,9 +73,9 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
 - ✅ استراتيجية النسخ الاحتياطي (مكتمل - الوكيل 12، محدّث إلى SHA-256 + HMAC)
 - ✅ Database Connection Pooling (مكتمل - الوكيل 14)
 
-#### ⏳ المرحلة 5: المراقبة - 25% مكتملة
+#### ⏳ المرحلة 5: المراقبة - 50% مكتملة
 - ✅ Health & Readiness Endpoints (مكتمل - الوكيل 20)
-- [ ] Prometheus & Grafana
+- ✅ Prometheus & Grafana (مكتمل - الوكيل 21)
 - [ ] نظام التنبيهات
 - [ ] Centralized Logging
 
@@ -91,6 +91,25 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
 - [ ] دليل المطور
 
 ## 📝 آخر التغييرات
+
+### 2025-10-01 (الوكيل رقم 21)
+**المهمة 5.2: Prometheus & Grafana Setup - مكتملة ✅**
+- ✅ إنشاء prometheus.yml (145 سطر) - جمع metrics كل 10s من /health/metrics
+- ✅ إنشاء grafana-datasource.yml (مع uid: prometheus)
+- ✅ إنشاء grafana-dashboard-aapanel.json (517 سطر، 6 panels)
+- ✅ إنشاء grafana-dashboard-provisioning.yml (38 سطر)
+- ✅ تكامل Docker Compose (production + Blue-Green)
+- ✅ إنشاء MONITORING_SETUP.md (552 سطر)
+- ✅ إنشاء .env.monitoring.example (نموذج للمتغيرات)
+- ✅ docker-compose.shared.yml: network alias للتوافق
+- ✅ حل 4 مشاكل حرجة من architect:
+  1. Datasource UID mismatch (أضفت uid: prometheus)
+  2. Security: إزالة admin/admin defaults (fail-safe)
+  3. Network connectivity: network alias في shared stack
+  4. Documentation consistency: تحديث جميع المراجع
+- ✅ موافقة architect النهائية: **PASS** (بعد 4 دورات)
+- 📊 التقدم الإجمالي: 73% → 77%
+- 📍 **المهمة التالية: المرحلة 5.3 - نظام التنبيهات**
 
 ### 2025-10-01 (الوكيل رقم 20)
 **المهمة 5.1: Health & Readiness Endpoints - مكتملة ✅**
@@ -207,7 +226,7 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
 - ✅ المهمة 3.4 (Blue-Green Deployment)
 
 ## 🎯 المهمة التالية
-**المرحلة 5.2: Prometheus & Grafana Setup**
+**المرحلة 5.3: نظام التنبيهات (Alerting System)**
 - الأولوية: متوسطة
-- المدة المتوقعة: 4-5 ساعات
-- المتطلبات: تثبيت Prometheus، إعداد Grafana dashboards، تجميع metrics من /health/metrics
+- المدة المتوقعة: 3-4 ساعات
+- المتطلبات: إعداد alerting rules في Prometheus، دمج مع Slack/Email، تحديد أولويات التنبيهات
