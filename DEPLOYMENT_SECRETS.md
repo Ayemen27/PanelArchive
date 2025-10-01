@@ -136,7 +136,7 @@ Ensure your `/opt/aapanel/.env` file contains:
 ```bash
 # Application
 ENVIRONMENT=production
-SECRET_KEY=your-super-secret-key-here
+SECRET_KEY=your-super-secret-key-here  # ⚠️ See SECRET_KEY Requirements below
 PORT=5000
 
 # Database
@@ -150,6 +150,73 @@ REDIS_URL=redis://redis:6379/0
 
 # Domain
 DOMAIN=aapanel.example.com
+```
+
+### 🔐 SECRET_KEY Requirements (IMPORTANT!)
+
+The `SECRET_KEY` is critical for:
+- **Backup Security**: HMAC-SHA256 authentication for backup integrity
+- **Session Security**: Secure user sessions
+- **Data Encryption**: Protect sensitive application data
+
+#### Production Requirements
+- ❌ **Minimum 32 characters** (64 recommended)
+- ❌ **Must NOT use default/weak keys:**
+  - `fallback-key-for-development`
+  - `dev-secret`
+  - `test-key`
+  - Any short keys (< 32 chars)
+- ✅ **Use cryptographically secure random string**
+
+#### Generate Secure SECRET_KEY
+
+```bash
+# Method 1: Python (Recommended)
+python3 -c "import secrets; print(secrets.token_hex(32))"
+
+# Method 2: OpenSSL
+openssl rand -hex 32
+
+# Method 3: /dev/urandom
+head -c 32 /dev/urandom | base64 | tr -d '\n=' && echo
+
+# Add to .env
+echo "SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')" >> /opt/aapanel/.env
+```
+
+#### ⚠️ Backup System Impact
+
+The backup system uses SECRET_KEY for HMAC verification:
+
+**Format v2 (Current - SHA-256 + HMAC):**
+- ✅ Strong integrity protection
+- ✅ Authenticity verification
+- ❌ **CRITICAL**: Changing SECRET_KEY will invalidate all existing backups!
+- ❌ **CRITICAL**: Weak keys rejected in production
+
+**Best Practice:**
+1. Generate strong SECRET_KEY during initial setup
+2. **Never change it** unless absolutely necessary
+3. If you must change it:
+   - Restore all critical backups **before** changing
+   - Create new backups **after** changing
+   - Document the change with old/new key mapping
+
+```bash
+# ⚠️ If you MUST change SECRET_KEY:
+
+# 1. Backup current SECRET_KEY
+echo "OLD_SECRET_KEY=$(grep SECRET_KEY /opt/aapanel/.env)" >> /opt/aapanel/.env.backup
+
+# 2. Restore important backups with old key
+python backups/backup_manager.py --restore backup_important.tar.gz
+
+# 3. Change SECRET_KEY
+NEW_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+sed -i "s/SECRET_KEY=.*/SECRET_KEY=$NEW_KEY/" /opt/aapanel/.env
+
+# 4. Create new backups with new key
+python backups/backup_manager.py
 ```
 
 ## Security Best Practices

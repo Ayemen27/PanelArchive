@@ -86,4 +86,41 @@ Dir usage analysis
 
 **Note: after the deployment is complete, please immediately modify the user name and password in the panel settings and add the installation entry**
 
+## 🔧 Advanced Features
+
+### 🔐 Backup System (SHA-256 + HMAC)
+Secure backup and restore system with advanced protection:
+- **SHA-256 + HMAC** for integrity and authenticity
+- **Path Traversal Protection** against Zip Slip attacks
+- **Resource Limits** to prevent Zip Bomb
+- **Automatic Scheduling** with cron/systemd
+
+```bash
+# Create backup
+python backups/backup_manager.py
+
+# List backups
+python backups/backup_manager.py --list
+
+# Restore backup
+python backups/backup_manager.py --restore backup_file.tar.gz
+```
+
+📖 Full documentation: [BACKUP_SYSTEM.md](BACKUP_SYSTEM.md)
+
+### 🔵🟢 Blue-Green Deployment
+Zero-downtime deployment strategy:
+- **Instant Rollback** in seconds
+- **Safe Testing** before switching
+- **Automated CI/CD** with GitHub Actions
+
+📖 Full documentation: [BLUE_GREEN_DEPLOYMENT.md](BLUE_GREEN_DEPLOYMENT.md)
+
+### 🚀 Quick Links
+- [Deployment Secrets Guide](DEPLOYMENT_SECRETS.md)
+- [Nginx Setup Guide](NGINX_SETUP.md)
+- [Systemd Setup Guide](SYSTEMD_SETUP.md)
+- [Migrations Guide](MIGRATIONS_GUIDE.md)
+- [Troubleshooting Guide](TROUBLESHOOTING.md)
+
 
