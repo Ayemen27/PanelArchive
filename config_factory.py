@@ -114,7 +114,8 @@ class BaseConfig:
             dict: قاموس يحتوي على جميع الإعدادات
         """
         # في الإنتاج، لا نسمح أبداً بتضمين المتغيرات الحساسة
-        if self.ENVIRONMENT == 'production':
+        # التحقق من نوع الكائن بدلاً من ENVIRONMENT لأنه قد يكون محرفاً
+        if isinstance(self, ProductionConfig):
             include_sensitive = False
         
         # المتغيرات الحساسة التي يجب إخفاؤها
