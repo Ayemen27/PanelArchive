@@ -147,19 +147,41 @@ check_item() {
 # SSH Port Detection Functions
 # ================================================================
 
+validate_port() {
+    # Validate that port is a valid number between 1-65535
+    local port="$1"
+    
+    # Check if it's a number
+    if ! [[ "$port" =~ ^[0-9]+$ ]]; then
+        return 1
+    fi
+    
+    # Check range (1-65535)
+    if [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+        return 1
+    fi
+    
+    return 0
+}
+
 detect_ssh_port_from_active_connections() {
     # Detect from active SSH connections using ss or netstat
+    # Supports IPv4, IPv6, and IPv4-mapped IPv6 addresses
     local port=""
     
     # Try ss first (modern tool)
     if command -v ss &> /dev/null; then
-        # Get the port of current SSH connection
-        port=$(ss -tnp 2>/dev/null | grep 'sshd' | grep -oP ':\K[0-9]+' | head -n1)
+        # Use awk to extract port from last colon-separated field
+        # This works for all address formats:
+        #   IPv4: 192.168.1.10:22 → extracts 22
+        #   IPv6: [::1]:22 → extracts 22
+        #   IPv4-mapped: ::ffff:192.168.1.10:22 → extracts 22 (NOT 192!)
+        port=$(ss -tnp 2>/dev/null | grep 'sshd' | awk '{print $4}' | awk -F: '{print $NF}' | head -n1)
     fi
     
     # Fallback to netstat if ss failed
     if [ -z "$port" ] && command -v netstat &> /dev/null; then
-        port=$(netstat -tnp 2>/dev/null | grep 'sshd' | grep -oP ':\K[0-9]+' | head -n1)
+        port=$(netstat -tnp 2>/dev/null | grep 'sshd' | awk '{print $4}' | awk -F: '{print $NF}' | head -n1)
     fi
     
     echo "$port"
@@ -191,11 +213,13 @@ detect_ssh_port_from_ufw_rules() {
 
 detect_ssh_port_from_listening_ports() {
     # Detect from listening ports
+    # Supports IPv4, IPv6, and IPv4-mapped IPv6 addresses
     local port=""
     
     if command -v ss &> /dev/null; then
-        # Find sshd listening port
-        port=$(ss -tln 2>/dev/null | grep 'sshd' | grep -oP ':\K[0-9]+' | head -n1)
+        # Use awk to extract port from last colon-separated field
+        # This works for all address formats (same as above)
+        port=$(ss -tln 2>/dev/null | grep 'sshd' | awk '{print $4}' | awk -F: '{print $NF}' | head -n1)
         
         # If not found, check for common SSH ports
         if [ -z "$port" ]; then
@@ -229,16 +253,17 @@ detect_active_ssh_port() {
     # Priority: Active connections > sshd_config > UFW rules > Listening ports
     local detected_port=""
     
-    if [ -n "$port_from_connections" ] && [ "$port_from_connections" -gt 0 ] 2>/dev/null; then
+    # Validate and use first valid port
+    if [ -n "$port_from_connections" ] && validate_port "$port_from_connections"; then
         detected_port=$port_from_connections
         print_success "تم اكتشاف المنفذ من الاتصالات النشطة: $detected_port"
-    elif [ -n "$port_from_config" ] && [ "$port_from_config" -gt 0 ] 2>/dev/null; then
+    elif [ -n "$port_from_config" ] && validate_port "$port_from_config"; then
         detected_port=$port_from_config
         print_success "تم اكتشاف المنفذ من sshd_config: $detected_port"
-    elif [ -n "$port_from_listening" ] && [ "$port_from_listening" -gt 0 ] 2>/dev/null; then
+    elif [ -n "$port_from_listening" ] && validate_port "$port_from_listening"; then
         detected_port=$port_from_listening
         print_success "تم اكتشاف المنفذ من المنافذ المستمعة: $detected_port"
-    elif [ -n "$port_from_ufw" ] && [ "$port_from_ufw" -gt 0 ] 2>/dev/null; then
+    elif [ -n "$port_from_ufw" ] && validate_port "$port_from_ufw"; then
         detected_port=$port_from_ufw
         print_success "تم اكتشاف المنفذ من قواعد UFW: $detected_port"
     else
