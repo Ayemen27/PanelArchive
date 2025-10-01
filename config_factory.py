@@ -447,7 +447,7 @@ if __name__ == "__main__":
     run_test("الاختبار: SECRET_KEY موجود", 
              hasattr(base_config, 'SECRET_KEY'))
     run_test("الاختبار: SECRET_KEY ليس فارغاً", 
-             len(base_config.SECRET_KEY) > 0)
+             base_config.SECRET_KEY is not None and len(base_config.SECRET_KEY) > 0)
     run_test("الاختبار: PORT موجود", 
              hasattr(base_config, 'PORT'))
     run_test("الاختبار: PORT رقم صحيح", 
@@ -458,7 +458,7 @@ if __name__ == "__main__":
     print(f"\nمعلومات BaseConfig:")
     print(f"  - البيئة: {base_config.ENVIRONMENT}")
     print(f"  - المنفذ: {base_config.PORT}")
-    print(f"  - SECRET_KEY length: {len(base_config.SECRET_KEY)}")
+    print(f"  - SECRET_KEY length: {len(base_config.SECRET_KEY) if base_config.SECRET_KEY else 0}")
     
     # ==================== الاختبار 2: DevelopmentConfig ====================
     print("\n--- الاختبار 2: DevelopmentConfig - إعدادات التطوير ---")
@@ -595,11 +595,11 @@ if __name__ == "__main__":
     config2 = BaseConfig()
     
     run_test("الاختبار: SECRET_KEY يتم توليده تلقائياً", 
-             len(config1.SECRET_KEY) > 0)
+             config1.SECRET_KEY is not None and len(config1.SECRET_KEY) > 0)
     run_test("الاختبار: SECRET_KEY فريد لكل instance", 
              config1.SECRET_KEY != config2.SECRET_KEY)
     run_test("الاختبار: SECRET_KEY بالطول الصحيح (64 حرف)", 
-             len(config1.SECRET_KEY) == 64)
+             config1.SECRET_KEY is not None and len(config1.SECRET_KEY) == 64)
     
     # اختبار SECRET_KEY من المتغيرات
     os.environ['SECRET_KEY'] = 'custom_secret_key_for_testing'
