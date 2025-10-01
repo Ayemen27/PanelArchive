@@ -54,7 +54,8 @@ class TestBackupSecurityPathTraversal(unittest.TestCase):
         
         info_path = Path(str(archive_path) + '.info')
         with open(info_path, 'w') as f:
-            f.write(f"MD5: fake_md5\n")
+            f.write(f"SHA256: fake_sha256_hash\n")
+            f.write(f"HMAC-SHA256: fake_hmac_hash\n")
         
         return str(archive_path)
     
@@ -164,7 +165,8 @@ class TestBackupSecurityWhitelist(unittest.TestCase):
         
         info_path = Path(str(archive_path) + '.info')
         with open(info_path, 'w') as f:
-            f.write(f"MD5: fake_md5\n")
+            f.write(f"SHA256: fake_sha256_hash\n")
+            f.write(f"HMAC-SHA256: fake_hmac_hash\n")
         
         return str(archive_path)
     

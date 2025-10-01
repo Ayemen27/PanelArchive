@@ -27,6 +27,7 @@ import argparse
 import subprocess
 import tarfile
 import hashlib
+import hmac
 import shutil
 import logging
 from datetime import datetime
@@ -120,21 +121,72 @@ def setup_logging(log_file: str = 'backups/backup.log') -> logging.Logger:
 
 
 # ==================== دوال مساعدة ====================
-def calculate_md5(file_path: str) -> str:
+def calculate_checksum(file_path: str, algorithm: str = 'sha256') -> str:
     """
-    حساب MD5 checksum للملف
+    حساب cryptographic hash للملف باستخدام SHA-256 (أو خوارزمية أخرى)
     
     Args:
         file_path: مسار الملف
+        algorithm: خوارزمية التشفير (sha256, sha512, md5 للتوافق مع الإصدارات القديمة)
     
     Returns:
-        str: MD5 checksum بصيغة hex
+        str: checksum بصيغة hex
+    
+    Note:
+        SHA-256 هو الافتراضي ويوصى به للأمان.
+        MD5 مدعوم فقط للتوافق مع النسخ القديمة (deprecated).
     """
-    hash_md5 = hashlib.md5()
+    if algorithm == 'md5':
+        import warnings
+        warnings.warn(
+            "MD5 is deprecated for security. Use SHA-256 instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        hasher = hashlib.md5()
+    elif algorithm == 'sha256':
+        hasher = hashlib.sha256()
+    elif algorithm == 'sha512':
+        hasher = hashlib.sha512()
+    else:
+        raise ValueError(f"Unsupported algorithm: {algorithm}")
+    
     with open(file_path, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            hash_md5.update(chunk)
-    return hash_md5.hexdigest()
+        for chunk in iter(lambda: f.read(8192), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def calculate_hmac(file_path: str, secret_key: str, algorithm: str = 'sha256') -> str:
+    """
+    حساب HMAC للملف باستخدام مفتاح سري
+    
+    Args:
+        file_path: مسار الملف
+        secret_key: المفتاح السري للـ HMAC
+        algorithm: خوارزمية التشفير (sha256, sha512)
+    
+    Returns:
+        str: HMAC بصيغة hex
+    
+    Note:
+        HMAC يوفر تحقق من السلامة والأصالة باستخدام مفتاح سري،
+        وهو أكثر أماناً من hash عادي لأنه يمنع التلاعب.
+    """
+    if algorithm == 'sha256':
+        hasher = hashlib.sha256
+    elif algorithm == 'sha512':
+        hasher = hashlib.sha512
+    else:
+        raise ValueError(f"Unsupported HMAC algorithm: {algorithm}")
+    
+    h = hmac.new(secret_key.encode('utf-8'), digestmod=hasher)
+    
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    
+    return h.hexdigest()
 
 
 def format_size(size_bytes: int) -> str:
@@ -267,9 +319,17 @@ class BackupManager:
             print(f"\n{Colors.OKCYAN}📦 جاري ضغط الملفات...{Colors.ENDC}")
             self._create_tarball(temp_dir, backup_path)
             
-            # حساب MD5 checksum
+            # حساب SHA-256 checksum + HMAC
             print(f"{Colors.OKCYAN}🔐 جاري حساب checksum...{Colors.ENDC}")
-            md5_hash = calculate_md5(str(backup_path))
+            sha256_hash = calculate_checksum(str(backup_path), algorithm='sha256')
+            
+            # حساب HMAC باستخدام SECRET_KEY للتحقق من الأصالة
+            secret_key = self.config.SECRET_KEY or ''
+            if not secret_key:
+                self.logger.warning("SECRET_KEY غير متوفر - تخطي HMAC")
+                hmac_hash = '(not-available)'
+            else:
+                hmac_hash = calculate_hmac(str(backup_path), secret_key, algorithm='sha256')
             
             # حفظ معلومات النسخة
             info_file = Path(str(backup_path) + '.info')
@@ -278,8 +338,12 @@ class BackupManager:
                 f.write(f"Created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write(f"Environment: {self.config.ENVIRONMENT}\n")
                 f.write(f"Database Type: {self.config.DATABASE_TYPE}\n")
-                f.write(f"MD5: {md5_hash}\n")
+                f.write(f"SHA256: {sha256_hash}\n")
+                f.write(f"HMAC-SHA256: {hmac_hash}\n")
                 f.write(f"Size: {format_size(backup_path.stat().st_size)}\n")
+                f.write(f"Algorithm: SHA-256\n")
+                # للتوافق مع النسخ القديمة (deprecated)
+                f.write(f"MD5: (deprecated - use SHA256)\n")
             
             # حذف المجلد المؤقت
             shutil.rmtree(temp_dir)
@@ -294,7 +358,8 @@ class BackupManager:
             print(f"{Colors.OKGREEN}{'=' * 70}{Colors.ENDC}")
             print(f"📁 الملف: {Colors.BOLD}{backup_path}{Colors.ENDC}")
             print(f"📊 الحجم: {Colors.BOLD}{size}{Colors.ENDC}")
-            print(f"🔐 MD5: {Colors.BOLD}{md5_hash}{Colors.ENDC}")
+            print(f"🔐 SHA-256: {Colors.BOLD}{sha256_hash[:16]}...{Colors.ENDC}")
+            print(f"🔒 HMAC: {Colors.BOLD}{hmac_hash[:16]}...{Colors.ENDC}")
             print(f"{Colors.OKGREEN}{'=' * 70}{Colors.ENDC}\n")
             
             self.logger.info(f"نسخة احتياطية ناجحة: {backup_path} ({size})")
@@ -864,7 +929,7 @@ class BackupManager:
                 return
         
         try:
-            # التحقق من MD5
+            # التحقق من Checksum (SHA-256 + HMAC أو MD5 للنسخ القديمة)
             info_file = Path(str(backup_path) + '.info')
             
             # fallback للملفات القديمة
@@ -875,32 +940,82 @@ class BackupManager:
             
             if info_file.exists():
                 with open(info_file, 'r') as f:
-                    md5_found = False
-                    for line in f:
-                        if line.startswith('MD5:'):
+                    info_content = f.read()
+                
+                sha256_found = False
+                hmac_found = False
+                md5_found = False
+                expected_sha256 = ''
+                expected_hmac = ''
+                expected_md5 = ''
+                
+                # محاولة SHA-256 + HMAC (الطريقة الجديدة الآمنة)
+                for line in info_content.split('\n'):
+                    if line.startswith('SHA256:'):
+                        sha256_found = True
+                        expected_sha256 = line.split(':', 1)[1].strip()
+                    elif line.startswith('HMAC-SHA256:'):
+                        hmac_found = True
+                        expected_hmac = line.split(':', 1)[1].strip()
+                    elif line.startswith('MD5:') and not sha256_found:
+                        # فقط إذا لم يوجد SHA256 (نسخ قديمة)
+                        md5_value = line.split(':', 1)[1].strip()
+                        if md5_value and '(deprecated' not in md5_value:
                             md5_found = True
-                            expected_md5 = line.split(':', 1)[1].strip()
-                            actual_md5 = calculate_md5(str(backup_path))
-                            
-                            if expected_md5 != actual_md5:
-                                print(f"{Colors.FAIL}❌ فشل التحقق من MD5!{Colors.ENDC}")
-                                print(f"   المتوقع: {expected_md5}")
-                                print(f"   الفعلي: {actual_md5}")
-                                return
-                            
-                            print(f"{Colors.OKGREEN}✓ تم التحقق من MD5 بنجاح{Colors.ENDC}")
+                            expected_md5 = md5_value
+                
+                # التحقق من SHA-256 + HMAC (الأفضل)
+                if sha256_found and hmac_found:
+                    print(f"{Colors.OKCYAN}🔐 جاري التحقق من SHA-256 + HMAC...{Colors.ENDC}")
                     
-                    if not md5_found and not skip_md5:
-                        print(f"{Colors.FAIL}❌ ملف .info لا يحتوي على MD5 checksum{Colors.ENDC}")
-                        print(f"   استخدم --skip-md5 لتخطي التحقق (غير آمن)")
+                    # التحقق من SHA-256
+                    actual_sha256 = calculate_checksum(str(backup_path), algorithm='sha256')
+                    if expected_sha256 != actual_sha256:
+                        print(f"{Colors.FAIL}❌ فشل التحقق من SHA-256!{Colors.ENDC}")
+                        print(f"   المتوقع: {expected_sha256}")
+                        print(f"   الفعلي: {actual_sha256}")
                         return
+                    
+                    print(f"{Colors.OKGREEN}✓ تم التحقق من SHA-256 بنجاح{Colors.ENDC}")
+                    
+                    # التحقق من HMAC
+                    secret_key = self.config.SECRET_KEY or 'fallback-key-for-development'
+                    actual_hmac = calculate_hmac(str(backup_path), secret_key, algorithm='sha256')
+                    if expected_hmac != actual_hmac:
+                        print(f"{Colors.FAIL}❌ فشل التحقق من HMAC!{Colors.ENDC}")
+                        print(f"   الملف قد يكون محرّف أو تم إنشاؤه بـ SECRET_KEY مختلف")
+                        return
+                    
+                    print(f"{Colors.OKGREEN}✓ تم التحقق من HMAC بنجاح (الأصالة مؤكدة){Colors.ENDC}")
+                
+                # fallback لـ MD5 (نسخ قديمة)
+                elif md5_found:
+                    print(f"{Colors.WARNING}⚠️  تحذير: النسخة تستخدم MD5 (deprecated){Colors.ENDC}")
+                    print(f"{Colors.WARNING}   يُوصى بإعادة إنشاء النسخة بـ SHA-256{Colors.ENDC}")
+                    
+                    actual_md5 = calculate_checksum(str(backup_path), algorithm='md5')
+                    if expected_md5 != actual_md5:
+                        print(f"{Colors.FAIL}❌ فشل التحقق من MD5!{Colors.ENDC}")
+                        print(f"   المتوقع: {expected_md5}")
+                        print(f"   الفعلي: {actual_md5}")
+                        return
+                    
+                    print(f"{Colors.OKGREEN}✓ تم التحقق من MD5 بنجاح{Colors.ENDC}")
+                
+                # لا يوجد checksum
+                elif not skip_md5:
+                    print(f"{Colors.FAIL}❌ ملف .info لا يحتوي على checksum صالح{Colors.ENDC}")
+                    print(f"   استخدم --skip-md5 لتخطي التحقق (غير آمن)")
+                    return
+            
+            # ملف .info غير موجود
             else:
                 if not skip_md5:
                     print(f"{Colors.FAIL}❌ ملف .info غير موجود - لا يمكن التحقق من سلامة النسخة{Colors.ENDC}")
                     print(f"   استخدم --skip-md5 لتخطي التحقق (غير آمن)")
                     return
                 else:
-                    print(f"{Colors.WARNING}⚠️  تحذير: تم تخطي التحقق من MD5 (--skip-md5){Colors.ENDC}")
+                    print(f"{Colors.WARNING}⚠️  تحذير: تم تخطي التحقق من checksum (--skip-md5){Colors.ENDC}")
             
             # استخراج الملفات بشكل آمن
             restore_dir = Path('restore_temp')
