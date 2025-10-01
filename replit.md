@@ -28,7 +28,7 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
 -   **CI/CD Pipeline:** Implemented via GitHub Actions for automated testing (pytest, coverage, security scanning with Bandit and Safety), linting/formatting (Flake8, Black, isort), multi-platform Docker image builds (GitHub Container Registry, SBOM generation, vulnerability scanning with Grype), and automated Blue-Green deployments to VPS. Includes a robust rollback mechanism and comprehensive health checks.
 -   **Database Migrations:** Utilizes Alembic and Flask-Migrate for managing database schema changes, including a robust validation system for migration files and content.
 -   **Database Backup Strategy:** Comprehensive backup system with support for SQLite, PostgreSQL, and MySQL, featuring automatic scheduling, SHA-256 + HMAC for integrity verification, and security measures against path traversal and unsafe extraction.
--   **Monitoring:** Health & Readiness Endpoints (`/health/live`, `/health/ready`, `/health/metrics`) are implemented for liveness/readiness probes and Prometheus metrics, integrated with Prometheus and Grafana for visualization.
+-   **Monitoring & Alerting:** Health & Readiness Endpoints (`/health/live`, `/health/ready`, `/health/metrics`) are implemented for liveness/readiness probes and Prometheus metrics, integrated with Prometheus and Grafana for visualization. Comprehensive alerting system configured with Prometheus Alertmanager, featuring 11 alert rules for resource monitoring (CPU, Memory, Disk), service availability (Application, Database, Redis), and performance thresholds. Notifications delivered via Slack (rich formatting) and Email (SMTP) with intelligent routing, grouping, and inhibition rules to prevent alert fatigue.
 
 ## External Dependencies
 -   **Web Server:** Gunicorn (with `GeventWebSocketWorker`)
@@ -42,5 +42,6 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
 -   **CI/CD Platform:** GitHub Actions
 -   **Container Registry:** GitHub Container Registry (ghcr.io)
 -   **Security Scanners:** Bandit, Safety, Anchore Grype
--   **Monitoring:** Prometheus, Grafana
+-   **Monitoring & Alerting:** Prometheus, Grafana, Alertmanager
+-   **Notification Channels:** Slack, Email (SMTP)
 -   **Database Migration:** Alembic, Flask-Migrate
