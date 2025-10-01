@@ -102,7 +102,7 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
 
 ### 2025-10-01 (الوكيل رقم 12)
 **المهمة 4.2: استراتيجية النسخ الاحتياطي - مكتملة ✅**
-- ✅ نظام نسخ احتياطي شامل (backup_manager.py - 869 سطر)
+- ✅ نظام نسخ احتياطي شامل (backup_manager.py - 868 سطر)
 - ✅ دعم SQLite, PostgreSQL, MySQL
 - ✅ جدولة تلقائية (Cron + Systemd Timer)
 - ✅ MD5 checksum للتحقق من السلامة

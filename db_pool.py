@@ -126,8 +126,9 @@ class DatabaseConnectionPool:
             retry_delay: التأخير بين المحاولات بالثواني (افتراضي: 0.5)
         """
         self.config = config or get_config()
-        self.pool_size = int(os.environ.get('DB_POOL_SIZE', pool_size))
-        self.max_overflow = int(os.environ.get('DB_MAX_OVERFLOW', max_overflow))
+        # استخدام الإعدادات من config كمصدر رئيسي
+        self.pool_size = getattr(self.config, 'DB_POOL_SIZE', pool_size)
+        self.max_overflow = getattr(self.config, 'DB_MAX_OVERFLOW', max_overflow)
         self.retry_attempts = retry_attempts
         self.retry_delay = retry_delay
         self.stats = PoolStatistics()
@@ -154,7 +155,7 @@ class DatabaseConnectionPool:
         
         try:
             # إنشاء Engine
-            self.engine = create_engine(
+            self.engine = create_engine(  # type: ignore[possibly-unbound]
                 database_uri,
                 **pool_config,
                 echo=False,  # تعطيل SQL logging (يمكن تفعيله في DEBUG)
@@ -193,9 +194,9 @@ class DatabaseConnectionPool:
                 'poolclass': QueuePool,
                 'pool_size': self.pool_size,
                 'max_overflow': self.max_overflow,
-                'pool_timeout': 30,  # انتظار 30 ثانية للحصول على اتصال
-                'pool_recycle': 3600,  # إعادة تدوير الاتصالات كل ساعة
-                'pool_pre_ping': True,  # التحقق من الاتصال قبل الاستخدام
+                'pool_timeout': getattr(self.config, 'DB_POOL_TIMEOUT', 30),
+                'pool_recycle': getattr(self.config, 'DB_POOL_RECYCLE', 3600),
+                'pool_pre_ping': getattr(self.config, 'DB_POOL_PRE_PING', True),
             }
         
         else:
@@ -209,22 +210,25 @@ class DatabaseConnectionPool:
     
     def _setup_event_listeners(self):
         """إعداد Event Listeners لتتبع الاتصالات"""
-        if not self.engine:
+        if not self.engine or not SQLALCHEMY_AVAILABLE:
             return
         
-        @event.listens_for(self.engine, "connect")
+        # ربط events مع engine.pool للتأكد من تشغيلها
+        pool_obj = self.engine.pool
+        
+        @event.listens_for(pool_obj, "connect")  # type: ignore[possibly-unbound]
         def receive_connect(dbapi_conn, connection_record):
             """عند إنشاء اتصال جديد"""
             self.stats.increment('connections_created')
             logger.debug("اتصال جديد تم إنشاؤه")
         
-        @event.listens_for(self.engine, "close")
+        @event.listens_for(pool_obj, "close")  # type: ignore[possibly-unbound]
         def receive_close(dbapi_conn, connection_record):
             """عند إغلاق اتصال"""
             self.stats.increment('connections_closed')
             logger.debug("تم إغلاق اتصال")
         
-        @event.listens_for(self.engine, "checkin")
+        @event.listens_for(pool_obj, "checkin")  # type: ignore[possibly-unbound]
         def receive_checkin(dbapi_conn, connection_record):
             """عند إرجاع اتصال للـ pool"""
             self.stats.increment('connections_recycled')
@@ -266,12 +270,14 @@ class DatabaseConnectionPool:
         Returns:
             connection: كائن الاتصال
         """
-        last_error = None
+        last_error: Optional[Exception] = None
         
         for attempt in range(self.retry_attempts):
             try:
+                if not self.engine:
+                    raise RuntimeError("Database Engine غير متوفر")
                 connection = self.engine.connect()
-                self.stats.increment('total_queries')
+                # عدّ الاتصالات الناجحة فقط (ليس الاستعلامات)
                 return connection
                 
             except (OperationalError, DBAPIError) as e:
@@ -287,7 +293,10 @@ class DatabaseConnectionPool:
                 else:
                     raise
         
-        raise last_error
+        # إذا وصلنا هنا، جميع المحاولات فشلت
+        if last_error:
+            raise last_error
+        raise RuntimeError("فشل الاتصال بقاعدة البيانات")
     
     def execute_with_retry(self, query: str, params: Optional[Dict] = None):
         """
@@ -305,6 +314,8 @@ class DatabaseConnectionPool:
                 result = conn.execute(text(query), params)
             else:
                 result = conn.execute(text(query))
+            # عدّ الاستعلامات الناجحة بعد التنفيذ
+            self.stats.increment('total_queries')
             return result
     
     def health_check(self) -> bool:
@@ -355,10 +366,10 @@ class DatabaseConnectionPool:
         return {
             'pool_size': self.pool_size,
             'max_overflow': self.max_overflow,
-            'current_size': pool_obj.size(),
-            'checked_in': pool_obj.checkedin(),
-            'checked_out': pool_obj.checkedout(),
-            'overflow': pool_obj.overflow(),
+            'current_size': pool_obj.size(),  # type: ignore[attr-defined]
+            'checked_in': pool_obj.checkedin(),  # type: ignore[attr-defined]
+            'checked_out': pool_obj.checkedout(),  # type: ignore[attr-defined]
+            'overflow': pool_obj.overflow(),  # type: ignore[attr-defined]
             'database_type': self.config.DATABASE_TYPE,
             'statistics': self.stats.get_stats()
         }
@@ -396,7 +407,7 @@ def with_db_retry(max_attempts: int = 3, delay: float = 0.5):
     def decorator(func: Callable):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            last_error = None
+            last_error: Optional[Exception] = None
             
             for attempt in range(max_attempts):
                 try:
@@ -412,7 +423,10 @@ def with_db_retry(max_attempts: int = 3, delay: float = 0.5):
                     else:
                         raise
             
-            raise last_error
+            # إذا وصلنا هنا، جميع المحاولات فشلت
+            if last_error:
+                raise last_error
+            raise RuntimeError(f"فشل تنفيذ {func.__name__}")
         
         return wrapper
     return decorator

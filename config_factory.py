@@ -42,6 +42,14 @@ class BaseConfig:
         self.DATABASE_URI = None
         self.DATABASE_TYPE = None
         
+        # ==================== DATABASE CONNECTION POOL ====================
+        # إعدادات Connection Pool للأداء المحسن
+        self.DB_POOL_SIZE = int(os.environ.get('DB_POOL_SIZE', '5'))
+        self.DB_MAX_OVERFLOW = int(os.environ.get('DB_MAX_OVERFLOW', '10'))
+        self.DB_POOL_TIMEOUT = int(os.environ.get('DB_POOL_TIMEOUT', '30'))
+        self.DB_POOL_RECYCLE = int(os.environ.get('DB_POOL_RECYCLE', '3600'))
+        self.DB_POOL_PRE_PING = os.environ.get('DB_POOL_PRE_PING', 'true').lower() == 'true'
+        
         # ==================== APPLICATION SETTINGS ====================
         # إعدادات التطبيق العامة
         self.MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16 MB max upload
