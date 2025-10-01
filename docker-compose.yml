@@ -143,6 +143,110 @@ services:
       timeout: 3s
       retries: 3
       start_period: 10s
+  
+  # ============================================================================
+  # خدمة Prometheus - Metrics Collection Service
+  # ============================================================================
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: aapanel_prometheus
+    
+    # أوامر إضافية - Additional commands
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    
+    # المنافذ - Ports (قم بإزالة هذا في الإنتاج واستخدم nginx reverse proxy)
+    ports:
+      - "9090:9090"
+    
+    # الأحجام - Volumes
+    volumes:
+      # ملف التكوين - Configuration file
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # بيانات Prometheus الدائمة - Persistent Prometheus data
+      - prometheus_data:/prometheus
+    
+    # الاعتماديات - Dependencies
+    depends_on:
+      - app
+    
+    # الشبكة - Network
+    networks:
+      - aapanel_network
+    
+    # سياسة إعادة التشغيل - Restart policy
+    restart: always
+    
+    # فحص الصحة - Health check
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+  
+  # ============================================================================
+  # خدمة Grafana - Visualization & Dashboards Service
+  # ============================================================================
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: aapanel_grafana
+    
+    # متغيرات البيئة - Environment variables
+    environment:
+      # Admin credentials (⚠️ يجب تغييرها في الإنتاج! لا تستخدم admin/admin)
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      # Server settings
+      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s:%(http_port)s/
+      - GF_SERVER_DOMAIN=${GRAFANA_DOMAIN:-localhost}
+      # Database (SQLite default)
+      - GF_DATABASE_TYPE=sqlite3
+      # Auth settings
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      # Logging
+      - GF_LOG_MODE=console
+      - GF_LOG_LEVEL=info
+    
+    # المنافذ - Ports (قم بإزالة هذا في الإنتاج واستخدم nginx reverse proxy)
+    ports:
+      - "3000:3000"
+    
+    # الأحجام - Volumes
+    volumes:
+      # بيانات Grafana الدائمة - Persistent Grafana data
+      - grafana_data:/var/lib/grafana
+      # Dashboards التلقائية - Auto-provisioned dashboards
+      - ./grafana-dashboard-aapanel.json:/var/lib/grafana/dashboards/aapanel.json:ro
+      # Datasource provisioning
+      - ./grafana-datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
+      # Dashboard provisioning
+      - ./grafana-dashboard-provisioning.yml:/etc/grafana/provisioning/dashboards/dashboard.yml:ro
+    
+    # الاعتماديات - Dependencies
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    
+    # الشبكة - Network
+    networks:
+      - aapanel_network
+    
+    # سياسة إعادة التشغيل - Restart policy
+    restart: always
+    
+    # فحص الصحة - Health check
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 # ==============================================================================
 # الأحجام الدائمة - Persistent Volumes
@@ -167,6 +271,16 @@ volumes:
   app_logs:
     driver: local
     name: aapanel_app_logs
+  
+  # بيانات Prometheus - Prometheus data
+  prometheus_data:
+    driver: local
+    name: aapanel_prometheus_data
+  
+  # بيانات Grafana - Grafana data
+  grafana_data:
+    driver: local
+    name: aapanel_grafana_data
 
 # ==============================================================================
 # الشبكات - Networks
@@ -199,9 +313,17 @@ networks:
 #    - فحص الصحة يعمل تلقائياً كل 30 ثانية
 #    - لعرض حالة الخدمات: docker-compose ps
 #    - لعرض السجلات: docker-compose logs -f [service_name]
+#    - Prometheus: http://localhost:9090
+#    - Grafana: http://localhost:3000 (admin/admin)
 #
 # 5. التحديثات - Updates:
 #    - لتحديث التطبيق: docker-compose up -d --build app
 #    - لتحديث جميع الخدمات: docker-compose up -d --build
+#
+# 6. Prometheus & Grafana:
+#    - Prometheus يجمع المقاييس من /health/metrics كل 10 ثوانٍ
+#    - Grafana dashboards محمّلة تلقائياً من grafana-dashboard-aapanel.json
+#    - لتغيير admin password: قم بتعيين GRAFANA_ADMIN_PASSWORD في .env
+#    - البيانات محفوظة في prometheus_data و grafana_data volumes
 #
 # ==============================================================================

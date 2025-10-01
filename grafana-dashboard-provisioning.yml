@@ -1,0 +1,38 @@
+# ==============================================================================
+# Grafana Dashboard Provisioning Configuration
+# ==============================================================================
+# تكوين التحميل التلقائي للـ dashboards في Grafana
+# يتم تحميل هذا الملف من /etc/grafana/provisioning/dashboards/
+# ==============================================================================
+
+apiVersion: 1
+
+# ==============================================================================
+# Dashboard Providers Configuration
+# ==============================================================================
+providers:
+  # ==========================================================================
+  # aaPanel Dashboards Provider
+  # ==========================================================================
+  - name: 'aapanel'
+    orgId: 1
+    folder: 'aaPanel'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      # المسار الذي يحتوي على ملفات dashboard JSON
+      path: /var/lib/grafana/dashboards
+
+# ==============================================================================
+# ملاحظات - Notes
+# ==============================================================================
+#
+# 1. يتم تحميل جميع ملفات .json من /var/lib/grafana/dashboards تلقائياً
+# 2. disableDeletion: false يسمح بحذف الـ dashboards من UI
+# 3. allowUiUpdates: true يسمح بتعديل الـ dashboards من UI
+# 4. updateIntervalSeconds: 10 يحدّث الـ dashboards كل 10 ثوانٍ
+# 5. folder: 'aaPanel' ينظم الـ dashboards في مجلد aaPanel
+#
+# ==============================================================================

@@ -80,6 +80,98 @@ services:
       timeout: 3s
       retries: 3
       start_period: 10s
+  
+  # ============================================================================
+  # Shared Prometheus - Metrics Collection Service
+  # ============================================================================
+  prometheus-shared:
+    image: prom/prometheus:v2.48.0
+    container_name: aapanel_prometheus_shared
+    
+    # Commands
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    
+    # Ports (قم بإزالة هذا في الإنتاج واستخدم nginx reverse proxy)
+    ports:
+      - "9090:9090"
+    
+    # Volumes
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data_shared:/prometheus
+    
+    # Network (with alias for datasource compatibility)
+    networks:
+      aapanel_network:
+        aliases:
+          - prometheus  # Allow Grafana to connect via http://prometheus:9090
+    
+    # Restart policy
+    restart: always
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+  
+  # ============================================================================
+  # Shared Grafana - Visualization & Dashboards Service
+  # ============================================================================
+  grafana-shared:
+    image: grafana/grafana:10.2.2
+    container_name: aapanel_grafana_shared
+    
+    # Environment
+    environment:
+      # ⚠️ يجب تعيين هذه المتغيرات في .env! لا توجد قيم افتراضية
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s:%(http_port)s/
+      - GF_SERVER_DOMAIN=${GRAFANA_DOMAIN:-localhost}
+      - GF_DATABASE_TYPE=sqlite3
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_LOG_MODE=console
+      - GF_LOG_LEVEL=info
+    
+    # Ports (قم بإزالة هذا في الإنتاج واستخدم nginx reverse proxy)
+    ports:
+      - "3000:3000"
+    
+    # Volumes
+    volumes:
+      - grafana_data_shared:/var/lib/grafana
+      - ./grafana-dashboard-aapanel.json:/var/lib/grafana/dashboards/aapanel.json:ro
+      - ./grafana-datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
+      - ./grafana-dashboard-provisioning.yml:/etc/grafana/provisioning/dashboards/dashboard.yml:ro
+    
+    # Dependencies
+    depends_on:
+      prometheus-shared:
+        condition: service_healthy
+    
+    # Network
+    networks:
+      - aapanel_network
+    
+    # Restart policy
+    restart: always
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 # ==============================================================================
 # Persistent Volumes
@@ -94,6 +186,16 @@ volumes:
   redis_data_shared:
     driver: local
     name: aapanel_redis_data_shared
+  
+  # Shared Prometheus data
+  prometheus_data_shared:
+    driver: local
+    name: aapanel_prometheus_data_shared
+  
+  # Shared Grafana data
+  grafana_data_shared:
+    driver: local
+    name: aapanel_grafana_data_shared
 
 # ==============================================================================
 # Networks

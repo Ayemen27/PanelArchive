@@ -1,0 +1,145 @@
+# ==============================================================================
+# Prometheus Configuration for aaPanel Monitoring
+# ==============================================================================
+# تكوين Prometheus لمراقبة تطبيق aaPanel
+#
+# يقوم هذا الملف بتحديد:
+# - global settings (معدل scrape، timeout)
+# - scrape configs (endpoints للمراقبة)
+# - alerting rules (قواعد التنبيه)
+# ==============================================================================
+
+# ==============================================================================
+# الإعدادات العامة - Global Settings
+# ==============================================================================
+global:
+  # معدل جمع المقاييس - How frequently to scrape targets
+  scrape_interval: 15s
+  
+  # المدة الزمنية لتقييم القواعد - How frequently to evaluate rules
+  evaluation_interval: 15s
+  
+  # Timeout عند جمع المقاييس - Scrape timeout
+  scrape_timeout: 10s
+  
+  # External labels للتعريف - External labels to add to any time series
+  external_labels:
+    monitor: 'aapanel-monitor'
+    environment: 'production'
+
+# ==============================================================================
+# Alerting Configuration (سيتم إضافته لاحقاً)
+# ==============================================================================
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['alertmanager:9093']
+
+# ==============================================================================
+# Rule files (سيتم إضافتها لاحقاً)
+# ==============================================================================
+# rule_files:
+#   - '/etc/prometheus/rules/*.yml'
+
+# ==============================================================================
+# Scrape Configurations - تكوينات جمع المقاييس
+# ==============================================================================
+scrape_configs:
+  
+  # ==========================================================================
+  # Prometheus Self-Monitoring
+  # ==========================================================================
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          component: 'monitoring'
+  
+  # ==========================================================================
+  # aaPanel Application Monitoring
+  # ==========================================================================
+  - job_name: 'aapanel'
+    # معدل جمع أسرع للتطبيق الرئيسي
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    
+    # Metrics endpoint
+    metrics_path: '/health/metrics'
+    
+    # Target configuration
+    static_configs:
+      - targets: ['app:5000']
+        labels:
+          service: 'aapanel'
+          component: 'application'
+          environment: 'production'
+    
+    # Relabeling (إعادة تسمية)
+    relabel_configs:
+      # حفظ instance label الأصلي
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: app:5000
+  
+  # ==========================================================================
+  # PostgreSQL Exporter (اختياري - يحتاج postgres_exporter)
+  # ==========================================================================
+  # - job_name: 'postgres'
+  #   static_configs:
+  #     - targets: ['postgres-exporter:9187']
+  #       labels:
+  #         service: 'postgres'
+  #         component: 'database'
+  
+  # ==========================================================================
+  # Redis Exporter (اختياري - يحتاج redis_exporter)
+  # ==========================================================================
+  # - job_name: 'redis'
+  #   static_configs:
+  #     - targets: ['redis-exporter:9121']
+  #       labels:
+  #         service: 'redis'
+  #         component: 'cache'
+  
+  # ==========================================================================
+  # Node Exporter للـ system metrics (اختياري)
+  # ==========================================================================
+  # - job_name: 'node'
+  #   static_configs:
+  #     - targets: ['node-exporter:9100']
+  #       labels:
+  #         service: 'node'
+  #         component: 'system'
+
+# ==============================================================================
+# Storage Configuration
+# ==============================================================================
+# استخدم الإعدادات الافتراضية (retention: 15d)
+# يمكن تخصيصها عبر command line flags في docker-compose.yml
+
+# ==============================================================================
+# ملاحظات مهمة - Important Notes
+# ==============================================================================
+#
+# 1. جمع المقاييس - Metrics Collection:
+#    - التطبيق الرئيسي: كل 10 ثوانٍ
+#    - Prometheus نفسه: كل 15 ثانية
+#
+# 2. Retention Policy:
+#    - البيانات محفوظة لمدة 15 يوم افتراضياً
+#    - يمكن تغييرها بـ --storage.tsdb.retention.time في Docker
+#
+# 3. التوسع - Scaling:
+#    - أضف postgres/redis exporters للمراقبة الأعمق
+#    - أضف node_exporter لمراقبة النظام
+#    - أضف alertmanager للتنبيهات
+#
+# 4. الأمان - Security:
+#    - استخدم basic_auth للحماية في الإنتاج
+#    - قيّد الوصول عبر nginx reverse proxy
+#
+# ==============================================================================

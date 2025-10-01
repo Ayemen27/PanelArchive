@@ -1,0 +1,55 @@
+# ==============================================================================
+# Grafana Datasource Configuration for aaPanel
+# ==============================================================================
+# تكوين مصدر البيانات التلقائي لـ Grafana
+# يتم تحميل هذا الملف تلقائياً عند بدء Grafana
+# ==============================================================================
+
+apiVersion: 1
+
+# ==============================================================================
+# Data Sources Configuration
+# ==============================================================================
+datasources:
+  # ==========================================================================
+  # Prometheus Data Source
+  # ==========================================================================
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    
+    # UID (يجب أن يطابق Dashboard)
+    uid: prometheus
+    
+    # URL للـ Prometheus (internal Docker network)
+    url: http://prometheus:9090
+    
+    # Basic Auth (معطل حالياً)
+    basicAuth: false
+    # basicAuthUser: admin
+    # basicAuthPassword: admin
+    
+    # إعدادات أخرى
+    isDefault: true
+    editable: true
+    
+    # JSON Data (إعدادات إضافية)
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s
+      # تخصيص query timeout
+      # queryTimeout: 60s
+      
+    # Version
+    version: 1
+
+# ==============================================================================
+# ملاحظات - Notes
+# ==============================================================================
+#
+# 1. يتم تحميل هذا الملف تلقائياً من /etc/grafana/provisioning/datasources/
+# 2. لتفعيل Basic Auth، قم بتغيير basicAuth إلى true وأضف credentials
+# 3. timeInterval يجب أن يطابق scrape_interval في Prometheus
+# 4. لإضافة مصادر بيانات أخرى، أضف entries جديدة تحت datasources
+#
+# ==============================================================================
