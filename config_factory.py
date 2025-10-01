@@ -489,8 +489,8 @@ if __name__ == "__main__":
     # ==================== الاختبار 3: ProductionConfig ====================
     print("\n--- الاختبار 3: ProductionConfig - إعدادات الإنتاج ---")
     
-    # تعيين SECRET_KEY للسماح بإنشاء ProductionConfig
-    os.environ['SECRET_KEY'] = 'test_secret_key_for_production'
+    # تعيين SECRET_KEY للسماح بإنشاء ProductionConfig (64 حرف للطول الآمن)
+    os.environ['SECRET_KEY'] = 'a' * 64  # مفتاح اختبار آمن بطول 64 حرف
     
     prod_config = ProductionConfig()
     
@@ -637,49 +637,59 @@ if __name__ == "__main__":
     # حفظ SECRET_KEY الحالي
     current_secret_key = os.environ.get('SECRET_KEY')
     
-    # اختبار: ProductionConfig يرفع RuntimeError بدون SECRET_KEY
+    # اختبار: ProductionConfig يرفع ValueError بدون SECRET_KEY
     if 'SECRET_KEY' in os.environ:
         del os.environ['SECRET_KEY']
     
     try:
         prod_no_secret = ProductionConfig()
-        run_test("الاختبار: ProductionConfig يرفع RuntimeError بدون SECRET_KEY", 
+        run_test("الاختبار: ProductionConfig يرفع ValueError بدون SECRET_KEY", 
                  False)
-    except RuntimeError as e:
-        run_test("الاختبار: ProductionConfig يرفع RuntimeError بدون SECRET_KEY", 
+    except ValueError as e:
+        run_test("الاختبار: ProductionConfig يرفع ValueError بدون SECRET_KEY", 
                  True)
         run_test("الاختبار: رسالة الخطأ تحتوي على 'SECRET_KEY must be set'", 
                  'SECRET_KEY must be set' in str(e))
     
-    # اختبار: ProductionConfig يرفع RuntimeError مع SECRET_KEY فارغ
+    # اختبار: ProductionConfig يرفع ValueError مع SECRET_KEY فارغ
     os.environ['SECRET_KEY'] = ''
     try:
         prod_empty_secret = ProductionConfig()
-        run_test("الاختبار: ProductionConfig يرفع RuntimeError مع SECRET_KEY فارغ", 
+        run_test("الاختبار: ProductionConfig يرفع ValueError مع SECRET_KEY فارغ", 
                  False)
-    except RuntimeError:
-        run_test("الاختبار: ProductionConfig يرفع RuntimeError مع SECRET_KEY فارغ", 
+    except ValueError:
+        run_test("الاختبار: ProductionConfig يرفع ValueError مع SECRET_KEY فارغ", 
                  True)
     
-    # اختبار: ProductionConfig يرفع RuntimeError مع SECRET_KEY مسافات فقط
+    # اختبار: ProductionConfig يرفع ValueError مع SECRET_KEY مسافات فقط
     os.environ['SECRET_KEY'] = '   '
     try:
         prod_spaces_secret = ProductionConfig()
-        run_test("الاختبار: ProductionConfig يرفع RuntimeError مع SECRET_KEY مسافات فقط", 
+        run_test("الاختبار: ProductionConfig يرفع ValueError مع SECRET_KEY مسافات فقط", 
                  False)
-    except RuntimeError:
-        run_test("الاختبار: ProductionConfig يرفع RuntimeError مع SECRET_KEY مسافات فقط", 
+    except ValueError:
+        run_test("الاختبار: ProductionConfig يرفع ValueError مع SECRET_KEY مسافات فقط", 
                  True)
     
-    # اختبار: ProductionConfig ينجح مع SECRET_KEY صالح
-    os.environ['SECRET_KEY'] = 'valid_production_secret_key'
+    # اختبار: ProductionConfig يرفض مفتاح قصير (<32 حرف)
+    os.environ['SECRET_KEY'] = 'short_key'
+    try:
+        prod_short_secret = ProductionConfig()
+        run_test("الاختبار: ProductionConfig يرفع ValueError مع مفتاح قصير", 
+                 False)
+    except ValueError:
+        run_test("الاختبار: ProductionConfig يرفع ValueError مع مفتاح قصير", 
+                 True)
+    
+    # اختبار: ProductionConfig ينجح مع SECRET_KEY صالح (64 حرف)
+    os.environ['SECRET_KEY'] = 'a' * 64  # مفتاح آمن بطول 64 حرف
     try:
         prod_valid_secret = ProductionConfig()
         run_test("الاختبار: ProductionConfig ينجح مع SECRET_KEY صالح", 
                  True)
         run_test("الاختبار: SECRET_KEY المخصص يُستخدم", 
-                 prod_valid_secret.SECRET_KEY == 'valid_production_secret_key')
-    except RuntimeError:
+                 prod_valid_secret.SECRET_KEY == 'a' * 64)
+    except ValueError:
         run_test("الاختبار: ProductionConfig ينجح مع SECRET_KEY صالح", 
                  False)
     
@@ -698,8 +708,8 @@ if __name__ == "__main__":
     saved_secret = os.environ.get('SECRET_KEY')
     saved_db_url = os.environ.get('DATABASE_URL')
     
-    # تعيين SECRET_KEY للسماح بإنشاء ProductionConfig
-    os.environ['SECRET_KEY'] = 'test_secret_key_for_mysql'
+    # تعيين SECRET_KEY للسماح بإنشاء ProductionConfig (64 حرف)
+    os.environ['SECRET_KEY'] = 'a' * 64
     
     # إزالة DATABASE_URL للسماح ببناء URI من المتغيرات المنفصلة
     if 'DATABASE_URL' in os.environ:
