@@ -29,6 +29,7 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
 -   **Database Migrations:** Utilizes Alembic and Flask-Migrate for managing database schema changes, including a robust validation system for migration files and content.
 -   **Database Backup Strategy:** Comprehensive backup system with support for SQLite, PostgreSQL, and MySQL, featuring automatic scheduling, SHA-256 + HMAC for integrity verification, and security measures against path traversal and unsafe extraction.
 -   **Monitoring & Alerting:** Health & Readiness Endpoints (`/health/live`, `/health/ready`, `/health/metrics`) are implemented for liveness/readiness probes and Prometheus metrics, integrated with Prometheus and Grafana for visualization. Comprehensive alerting system configured with Prometheus Alertmanager, featuring 11 alert rules for resource monitoring (CPU, Memory, Disk), service availability (Application, Database, Redis), and performance thresholds. Notifications delivered via Slack (rich formatting) and Email (SMTP) with intelligent routing, grouping, and inhibition rules to prevent alert fatigue.
+-   **Centralized Logging:** Grafana Loki and Promtail are deployed for centralized log aggregation and analysis. Loki runs as an internal-only service (no external port binding) for security, accessible via Grafana. Promtail collects logs from Docker containers, application logs, and system logs with container metadata enrichment via Docker socket (read-only mount). Features structured JSON logging in the application, 7-day retention with automatic compaction, and a comprehensive Grafana dashboard with 7 panels for log visualization, filtering by service/level/container, and LogQL search capabilities. Log rotation is configured (10MB max size, 5 backups) for application logs.
 
 ## External Dependencies
 -   **Web Server:** Gunicorn (with `GeventWebSocketWorker`)
@@ -44,4 +45,5 @@ The project leverages Python 3.12 and the Flask framework, served with Gunicorn 
 -   **Security Scanners:** Bandit, Safety, Anchore Grype
 -   **Monitoring & Alerting:** Prometheus, Grafana, Alertmanager
 -   **Notification Channels:** Slack, Email (SMTP)
+-   **Centralized Logging:** Grafana Loki, Promtail
 -   **Database Migration:** Alembic, Flask-Migrate
