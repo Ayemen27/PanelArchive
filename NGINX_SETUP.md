@@ -384,7 +384,8 @@ sudo mv nginx-prometheus-exporter /usr/local/bin/
 - ✅ مراجعة السجلات بانتظام
 - ✅ مراقبة استخدام الموارد
 - ✅ تحديث nginx بانتظام
-- ✅ نسخ احتياطية للتهيئة
+- ✅ نسخ احتياطية للتهيئة (استخدم نظام SHA-256 + HMAC المدمج)
+  - انظر [DEPLOYMENT_SECRETS.md](./DEPLOYMENT_SECRETS.md) لتفاصيل SECRET_KEY
 
 ---
 
@@ -408,7 +409,7 @@ sudo mv nginx-prometheus-exporter /usr/local/bin/
 - تأكد من تحديث DNS للنطاق
 - افتح المنافذ 80 و 443 في الـ firewall
 - راقب استخدام الموارد
-- احتفظ بنسخ احتياطية من التهيئة
+- احتفظ بنسخ احتياطية من التهيئة (`python backups/backup_manager.py`)
 
 ### للتطوير
 - استخدم Docker Compose بدلاً من nginx

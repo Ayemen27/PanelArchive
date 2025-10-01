@@ -248,7 +248,10 @@ alembic upgrade head
 
 **الحل**:
 ```bash
-# 1. خذ نسخة احتياطية فوراً!
+# 1. خذ نسخة احتياطية فوراً! (SHA-256 + HMAC)
+python backups/backup_manager.py
+
+# أو استخدام pg_dump
 pg_dump $DATABASE_URL > backup_$(date +%Y%m%d_%H%M%S).sql
 
 # 2. تحقق من سلامة DB
@@ -256,6 +259,8 @@ pg_dump $DATABASE_URL > backup_$(date +%Y%m%d_%H%M%S).sql
 psql $DATABASE_URL -c "VACUUM ANALYZE;"
 
 # 3. استعد من آخر نسخة احتياطية صحيحة
+python backups/backup_manager.py --restore backup_latest.tar.gz
+# أو
 psql $DATABASE_URL < backup_20250930_120000.sql
 
 # 4. راجع الكود الذي سبب المشكلة
@@ -634,7 +639,13 @@ sudo systemctl start aapanel
 
 ### استعادة من backup:
 ```bash
-# قاعدة البيانات
+# باستخدام نظام النسخ الاحتياطي المدمج (SHA-256 + HMAC - موصى به)
+python backups/backup_manager.py --restore backup_file.tar.gz
+
+# للنسخ القديمة (MD5)
+python backups/backup_manager.py --restore backup_file.tar.gz --skip-md5
+
+# قاعدة البيانات مباشرة
 psql $DATABASE_URL < backup_latest.sql
 
 # الملفات
@@ -644,6 +655,8 @@ tar -xzf backup_files.tar.gz -C /www/server/panel
 cp backup/.env .env
 cp backup/runconfig.py runconfig.py
 ```
+
+> **📚 ملاحظة:** النسخ الجديدة تستخدم SHA-256 + HMAC للتحقق من السلامة. راجع [DEPLOYMENT_SECRETS.md](./DEPLOYMENT_SECRETS.md) لتفاصيل عن SECRET_KEY وتأثيره على النسخ الاحتياطية.
 
 ### فحص شامل:
 ```bash

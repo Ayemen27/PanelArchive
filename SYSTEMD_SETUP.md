@@ -574,7 +574,11 @@ sudo journalctl -u aapanel -p err -f | mail -s "aaPanel Error" admin@example.com
 ```bash
 # Backup service file
 sudo cp /etc/systemd/system/aapanel.service /root/backups/
+
+# نسخ احتياطي للتطبيق والبيانات (SHA-256 + HMAC)
+python backups/backup_manager.py
 ```
+> **📚 ملاحظة:** راجع [DEPLOYMENT_SECRETS.md](./DEPLOYMENT_SECRETS.md) لتفاصيل عن دور SECRET_KEY في التحقق من HMAC
 
 ✅ **تدوير السجلات:**
 ```bash
