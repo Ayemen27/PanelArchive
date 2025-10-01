@@ -687,12 +687,13 @@ class BackupManager:
         else:
             print(f"\n{Colors.WARNING}❌ تم الإلغاء{Colors.ENDC}\n")
     
-    def restore_backup(self, backup_file: str):
+    def restore_backup(self, backup_file: str, force: bool = False):
         """
         استرجاع نسخة احتياطية
         
         Args:
             backup_file: مسار ملف النسخة الاحتياطية
+            force: تخطي التأكيد اليدوي (افتراضي: False)
         """
         backup_path = Path(backup_file)
         
@@ -706,11 +707,12 @@ class BackupManager:
         print(f"\nهذه العملية ستستبدل البيانات الحالية!")
         print(f"الملف: {backup_path.name}\n")
         
-        confirm = input(f"{Colors.BOLD}هل تريد المتابعة؟ (yes/no): {Colors.ENDC}").lower()
-        
-        if confirm not in ['yes', 'y', 'نعم']:
-            print(f"\n{Colors.WARNING}❌ تم الإلغاء{Colors.ENDC}\n")
-            return
+        if not force:
+            confirm = input(f"{Colors.BOLD}هل تريد المتابعة؟ (yes/no): {Colors.ENDC}").lower()
+            
+            if confirm not in ['yes', 'y', 'نعم']:
+                print(f"\n{Colors.WARNING}❌ تم الإلغاء{Colors.ENDC}\n")
+                return
         
         try:
             # التحقق من MD5
@@ -775,6 +777,8 @@ def main():
                        help='تغيير عدد النسخ المحفوظة (الافتراضي: 7)')
     parser.add_argument('--restore', type=str, metavar='FILE',
                        help='استرجاع نسخة احتياطية من ملف')
+    parser.add_argument('--force', action='store_true',
+                       help='تخطي التأكيد اليدوي (مع --restore)')
     parser.add_argument('--no-color', action='store_true',
                        help='تعطيل الألوان في الإخراج')
     
@@ -794,7 +798,7 @@ def main():
     elif args.cleanup:
         manager.cleanup_all()
     elif args.restore:
-        manager.restore_backup(args.restore)
+        manager.restore_backup(args.restore, force=args.force)
     elif args.keep:
         print(f"\n{Colors.OKGREEN}✅ تم تعيين عدد النسخ المحفوظة إلى: {args.keep}{Colors.ENDC}\n")
         manager.display_backups()
