@@ -23,7 +23,17 @@ class BaseConfig:
         
         # ==================== SECRET KEY ====================
         # المفتاح السري للتطبيق - يستخدم للتشفير والجلسات
-        self.SECRET_KEY = os.environ.get('SECRET_KEY') or self._generate_secret_key()
+        # ملاحظة: في الإنتاج، يجب تعيين SECRET_KEY من المتغيرات
+        self.SECRET_KEY = os.environ.get('SECRET_KEY')
+        if not self.SECRET_KEY:
+            self.SECRET_KEY = self._generate_secret_key()
+            # تحذير: المفتاح المولد تلقائياً للتطوير فقط
+            import warnings
+            warnings.warn(
+                "SECRET_KEY not set. Using auto-generated key (development only). "
+                "This key will change on restart, invalidating sessions.",
+                RuntimeWarning
+            )
         
         # ==================== PORT CONFIGURATION ====================
         # إعدادات المنفذ (Port)
@@ -92,17 +102,39 @@ class BaseConfig:
         # افتراضياً: المنفذ 5000
         return 5000
     
-    def get_config_dict(self):
+    def get_config_dict(self, include_sensitive=False):
         """
         ترجع جميع الإعدادات كقاموس
+        
+        Args:
+            include_sensitive: إذا كان True، يتضمن المتغيرات الحساسة (غير آمن)
+                              يُتجاهل في بيئة الإنتاج لمنع التسريب
         
         Returns:
             dict: قاموس يحتوي على جميع الإعدادات
         """
+        # في الإنتاج، لا نسمح أبداً بتضمين المتغيرات الحساسة
+        if self.ENVIRONMENT == 'production':
+            include_sensitive = False
+        
+        # المتغيرات الحساسة التي يجب إخفاؤها
+        SENSITIVE_KEYS = {
+            'SECRET_KEY', 'DB_PASSWORD', 'SSL_KEY_PATH',
+            'DATABASE_URI', 'CACHE_REDIS_URL'
+        }
+        
         config_dict = {}
         for key in dir(self):
             if key.isupper():
-                config_dict[key] = getattr(self, key)
+                value = getattr(self, key)
+                # إخفاء المتغيرات الحساسة
+                if key in SENSITIVE_KEYS and not include_sensitive:
+                    if isinstance(value, str):
+                        config_dict[key] = f'<redacted:{len(value)} chars>'
+                    else:
+                        config_dict[key] = '<redacted>'
+                else:
+                    config_dict[key] = value
         return config_dict
     
     def __repr__(self):
@@ -178,9 +210,45 @@ class ProductionConfig(BaseConfig):
         """تهيئة إعدادات الإنتاج"""
         # ==================== VALIDATE SECRET_KEY ====================
         # في بيئة الإنتاج، SECRET_KEY إلزامي من المتغيرات
-        secret_key = os.environ.get('SECRET_KEY')
-        if not secret_key or secret_key.strip() == '':
-            raise RuntimeError("SECRET_KEY must be set in production environment")
+        secret_key = os.environ.get('SECRET_KEY', '').strip()
+        
+        # فحص الوجود والفراغ
+        if not secret_key:
+            raise ValueError(
+                "SECRET_KEY must be set in production environment.\n"
+                "Generate a secure key using:\n"
+                "  python -c 'import secrets; print(secrets.token_hex(32))'\n"
+                "Then set it in your .env file or environment:\n"
+                "  export SECRET_KEY='your-generated-key-here'"
+            )
+        
+        # فحص الطول الأدنى (32 بايت = 64 حرف hex على الأقل موصى به)
+        if len(secret_key) < 32:
+            raise ValueError(
+                f"SECRET_KEY too short ({len(secret_key)} chars). "
+                f"Minimum 32 characters required for security.\n"
+                f"Generate a secure 64-char key using:\n"
+                f"  python -c 'import secrets; print(secrets.token_hex(32))'"
+            )
+        
+        # فحص القيم المعروفة/الافتراضية
+        placeholder_values = [
+            'your-secret-key-here',
+            'change-this-key',
+            'secret-key-here',
+            'secret_key',
+            'secretkey',
+            'mysecretkey',
+        ]
+        if secret_key.lower() in placeholder_values:
+            raise ValueError(
+                f"SECRET_KEY contains a placeholder value: '{secret_key}'\n"
+                f"This is insecure. Generate a unique key using:\n"
+                f"  python -c 'import secrets; print(secrets.token_hex(32))'"
+            )
+        
+        # تحديث المتغير البيئي بالقيمة المنظفة (stripped)
+        os.environ['SECRET_KEY'] = secret_key
         
         super().__init__()
         
