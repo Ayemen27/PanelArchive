@@ -128,3 +128,4 @@ zope.interface==6.2
 db
 alembic
 flask-migrate
+prometheus-client

@@ -6530,3 +6530,10 @@ def init_cdn_config(app):
     return
 
 init_cdn_config(app)
+
+# Register Health Endpoints
+try:
+    from health_endpoints import register_health_routes
+    register_health_routes(app)
+except ImportError as e:
+    print(f"Warning: Could not register health endpoints: {e}")
