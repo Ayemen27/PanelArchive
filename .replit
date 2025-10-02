@@ -3,3 +3,14 @@ modules = ["python-3.12"]
 [nix]
 channel = "stable-25_05"
 packages = ["cacert", "cargo", "curl", "freetype", "gdb", "glibcLocales", "gmp", "grpc", "lcms2", "libarchive", "libev", "libffi", "libiconv", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "ncurses", "openjpeg", "openssl", "pkg-config", "rustc", "sqlite", "tcl", "tk", "udev", "unrar", "xcodebuild", "zlib"]
+
+[workflows]
+
+[[workflows.workflow]]
+name = "Test"
+mode = "sequential"
+author = 48240318
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "Python3 runserver.py "
