@@ -63,7 +63,11 @@ def setup_logging():
     """
     log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
     log_format = os.getenv('LOG_FORMAT', 'json').lower()
-    log_file = os.getenv('LOG_FILE', '/app/logs/app.log')
+    
+    # استخدام مسار logs ديناميكي بناءً على المسار الحالي
+    default_log_file = os.path.join(os.getcwd(), 'logs', 'app.log')
+    log_file = os.getenv('LOG_FILE', default_log_file)
+    
     log_max_bytes = int(os.getenv('LOG_MAX_BYTES', '10485760'))
     log_backup_count = int(os.getenv('LOG_BACKUP_COUNT', '5'))
     log_to_console = os.getenv('LOG_TO_CONSOLE', 'true').lower() == 'true'
