@@ -8963,6 +8963,16 @@ def get_setup_path():
         @author hwliang<2021-07-22>
         @return string
     '''
+    # التحقق من وجود environment_detector
+    try:
+        import environment_detector
+        if environment_detector.is_replit():
+            # في Replit: استخدم المسار الحالي
+            return os.getcwd()
+    except ImportError:
+        pass
+    
+    # في VPS أو عند فشل الاستيراد: استخدم المسار الثابت
     return '/www/server'
 
 
@@ -8973,6 +8983,16 @@ def get_panel_path():
         @author hwliang<2021-07-14>
         @return string
     '''
+    # التحقق من وجود environment_detector
+    try:
+        import environment_detector
+        if environment_detector.is_replit():
+            # في Replit: المسار الحالي هو panel path
+            return os.getcwd()
+    except ImportError:
+        pass
+    
+    # في VPS أو عند فشل الاستيراد: استخدم المسار الثابت
     return '{}/panel'.format(get_setup_path())
 
 

@@ -12,7 +12,6 @@
 #------------------------------
 import public,os,re,shutil
 from json import loads
-os.chdir("/www/server/panel")
 
 class nginx:
     setupPath = '/www/server'

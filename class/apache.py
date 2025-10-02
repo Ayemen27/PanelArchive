@@ -12,7 +12,6 @@
 #------------------------------
 import public,os,re,shutil,math,psutil,time
 from json import loads
-os.chdir("/www/server/panel")
 
 class apache:
     setupPath = '/www/server'
