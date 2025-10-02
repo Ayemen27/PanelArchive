@@ -8,6 +8,10 @@
 5. [مشاكل النشر](#مشاكل-النشر)
 6. [مشاكل الأداء](#مشاكل-الأداء)
 7. [مشاكل الأمان](#مشاكل-الأمان)
+8. [مشاكل المراقبة](#مشاكل-المراقبة)
+9. [مشاكل Logging](#مشاكل-logging)
+10. [مشاكل التنبيهات](#مشاكل-التنبيهات)
+11. [مشاكل Blue-Green Deployment](#مشاكل-blue-green-deployment)
 
 ---
 
@@ -574,6 +578,627 @@ sudo fail2ban-client set sshd banip 192.168.1.100
 
 # 5. راجع التكوين
 cat /etc/fail2ban/jail.local
+```
+
+---
+
+## 📊 مشاكل المراقبة
+
+### المشكلة: Prometheus لا يجمع metrics
+
+**الأعراض**:
+- Dashboard في Grafana فارغ
+- "No data" في Prometheus
+- Targets تظهر "DOWN"
+
+**الحل**:
+```bash
+# 1. تحقق من صحة Prometheus
+curl http://localhost:9090/-/healthy
+
+# 2. تحقق من targets
+curl http://localhost:9090/api/v1/targets
+
+# 3. تحقق من /health/metrics في التطبيق
+curl http://localhost:5000/health/metrics
+
+# 4. افحص prometheus.yml
+cat prometheus.yml
+
+# 5. تحقق من logs
+docker-compose logs prometheus
+
+# 6. أعد تشغيل Prometheus
+docker-compose restart prometheus
+
+# 7. تحقق من Docker network
+docker network inspect aapanel_network
+```
+
+---
+
+### المشكلة: Grafana لا تعرض البيانات
+
+**الأعراض**:
+- Dashboard يفتح لكن بدون بيانات
+- "Bad Gateway" أو "Connection refused"
+
+**الحل**:
+```bash
+# 1. تحقق من datasource في Grafana
+# افتح: Configuration > Data Sources > Prometheus > Test
+
+# 2. تحقق من اتصال Prometheus
+docker exec -it aapanel_grafana ping prometheus
+
+# 3. تحقق من URL datasource
+# يجب أن يكون: http://prometheus:9090
+
+# 4. افحص logs
+docker-compose logs grafana
+
+# 5. تحقق من credentials
+echo $GRAFANA_ADMIN_USER
+echo $GRAFANA_ADMIN_PASSWORD
+
+# 6. أعد تشغيل Grafana
+docker-compose restart grafana
+```
+
+---
+
+### المشكلة: Health endpoints لا تعمل
+
+**الأعراض**:
+```
+curl: (7) Failed to connect to localhost port 5000
+```
+
+**الحل**:
+```bash
+# 1. تحقق من أن التطبيق يعمل
+docker-compose ps app
+
+# 2. اختبر endpoints
+curl http://localhost:5000/health
+curl http://localhost:5000/health/live
+curl http://localhost:5000/health/ready
+curl http://localhost:5000/health/metrics
+
+# 3. تحقق من port mapping
+docker port aapanel_app
+
+# 4. افحص logs التطبيق
+docker-compose logs app | grep -i "health"
+
+# 5. تحقق من الكود
+# تأكد من وجود health_routes في التطبيق
+```
+
+---
+
+### المشكلة: مشاكل في Dashboards
+
+**الأعراض**:
+- Dashboard لا يحمل
+- Panels فارغة
+- أخطاء في queries
+
+**الحل**:
+```bash
+# 1. تحقق من Dashboard provisioning
+docker-compose exec grafana ls -la /etc/grafana/provisioning/dashboards/
+
+# 2. تحقق من Dashboard JSON
+cat grafana-dashboard-aapanel.json
+
+# 3. اختبر PromQL queries يدوياً
+curl -g 'http://localhost:9090/api/v1/query?query=aapanel_cpu_percent'
+
+# 4. أعد تحميل Dashboard
+# في Grafana: Dashboard Settings > JSON Model > Save
+
+# 5. تحقق من logs
+docker-compose logs grafana | grep -i "dashboard"
+
+# 6. أعد إنشاء Dashboard من الملف
+# احذف Dashboard القديم وأعد تشغيل Grafana
+docker-compose restart grafana
+```
+
+---
+
+## 📝 مشاكل Logging
+
+### المشكلة: Loki لا يستقبل logs
+
+**الأعراض**:
+- لا توجد logs في Grafana Explore
+- Promtail يعمل لكن لا بيانات
+
+**الحل**:
+```bash
+# 1. تحقق من صحة Loki
+docker-compose ps loki
+
+# 2. اختبر Loki API
+curl http://loki:3100/ready
+# من داخل container:
+docker exec -it aapanel_app curl http://loki:3100/ready
+
+# 3. تحقق من logs
+docker-compose logs loki | tail -50
+
+# 4. افحص التكوين
+docker-compose exec loki cat /etc/loki/local-config.yaml
+
+# 5. تحقق من retention policy
+# في loki-config.yml:
+# retention_period: 168h
+
+# 6. أعد تشغيل Loki
+docker-compose restart loki
+
+# 7. تحقق من Docker volumes
+docker volume inspect aapanel_loki_data
+```
+
+---
+
+### المشكلة: Promtail لا يرسل logs
+
+**الأعراض**:
+- Promtail targets فارغة
+- "failed to get docker container info"
+
+**الحل**:
+```bash
+# 1. تحقق من حالة Promtail
+docker-compose ps promtail
+
+# 2. تحقق من targets
+curl http://localhost:9080/targets
+
+# 3. افحص logs
+docker-compose logs promtail | tail -50
+
+# 4. تحقق من Docker socket mount
+docker inspect aapanel_promtail | grep -A 5 "docker.sock"
+
+# يجب أن ترى:
+# /var/run/docker.sock:/var/run/docker.sock:ro
+
+# 5. تحقق من volumes
+docker inspect aapanel_promtail | grep -A 10 Mounts
+
+# 6. تحقق من صلاحيات logs/
+ls -la logs/
+
+# 7. أعد تشغيل Promtail
+docker-compose restart promtail
+
+# 8. تحقق من promtail-config.yml
+cat promtail-config.yml
+```
+
+---
+
+### المشكلة: مشاكل في البحث في logs
+
+**الأعراض**:
+- استعلامات LogQL لا تعيد نتائج
+- "No data" في Grafana Explore
+
+**الحل**:
+```bash
+# 1. اختبر LogQL query بسيطة
+# في Grafana Explore:
+{job="aapanel"}
+
+# 2. تحقق من labels المتاحة
+curl -G -s "http://loki:3100/loki/api/v1/label/job/values"
+# من داخل container:
+docker exec -it aapanel_app curl -G -s "http://loki:3100/loki/api/v1/label/job/values"
+
+# 3. تحقق من JSON formatting في logs
+tail -f logs/app.log
+# يجب أن ترى JSON مثل:
+# {"timestamp": "...", "level": "INFO", ...}
+
+# 4. تحقق من متغيرات البيئة
+docker-compose exec app env | grep LOG_
+
+# يجب أن تكون:
+# LOG_FORMAT=json
+# LOG_LEVEL=INFO
+
+# 5. اختبر query مع time range
+# في Explore: {job="aapanel"} [5m]
+
+# 6. راجع Dashboard queries
+# Dashboard > Panel > Edit > Query
+```
+
+---
+
+### المشكلة: Log retention issues
+
+**الأعراض**:
+- السجلات تُحذف بسرعة
+- أو السجلات القديمة لا تُحذف
+
+**الحل**:
+```bash
+# 1. تحقق من retention policy في loki-config.yml
+cat loki-config.yml | grep -A 5 "retention_period"
+
+# 2. تعديل retention (مثال: 7 أيام)
+# في loki-config.yml:
+# limits_config:
+#   retention_period: 168h  # 7 days
+
+# 3. تحقق من مساحة القرص
+df -h /var/lib/docker/volumes
+
+# 4. تحقق من حجم Loki data
+docker system df -v | grep loki
+
+# 5. تنظيف يدوي (حذر!)
+docker exec -it aapanel_loki sh
+find /tmp/loki -type f -mtime +7 -delete
+exit
+
+# 6. أعد تشغيل Loki بعد التغييرات
+docker-compose restart loki
+
+# 7. تحقق من compactor
+# في loki-config.yml:
+# compactor:
+#   compaction_interval: 10m
+```
+
+---
+
+## 🔔 مشاكل التنبيهات
+
+### المشكلة: Alertmanager لا يرسل تنبيهات
+
+**الأعراض**:
+- التنبيهات نشطة في Prometheus
+- لكن لا تصل إشعارات
+
+**الحل**:
+```bash
+# 1. تحقق من اتصال Alertmanager بـ Prometheus
+curl http://localhost:9090/api/v1/alertmanagers | jq
+
+# 2. تحقق من حالة Alertmanager
+curl http://localhost:9093/-/healthy
+
+# 3. افحص logs
+docker-compose logs alertmanager | tail -50
+
+# 4. تحقق من التكوين
+curl http://localhost:9093/api/v1/status | jq '.data.config'
+
+# 5. تحقق من متغيرات البيئة
+docker-compose exec alertmanager env | grep -E "SLACK|SMTP|EMAIL"
+
+# 6. تحقق من expand-env flag
+docker-compose logs alertmanager | grep "expand-env"
+
+# 7. اختبر إرسال تنبيه يدوي
+curl -X POST http://localhost:9093/api/v1/alerts -H "Content-Type: application/json" -d '[
+  {
+    "labels": {"alertname": "TestAlert", "severity": "warning"},
+    "annotations": {"summary": "Test alert"}
+  }
+]'
+
+# 8. أعد تشغيل Alertmanager
+docker-compose restart alertmanager
+```
+
+---
+
+### المشكلة: مشاكل Slack notifications
+
+**الأعراض**:
+- التنبيهات لا تصل إلى Slack
+- خطأ "invalid webhook URL"
+
+**الحل**:
+```bash
+# 1. تحقق من SLACK_WEBHOOK_URL في .env
+cat .env | grep SLACK_WEBHOOK_URL
+
+# يجب أن يبدأ بـ: https://hooks.slack.com/services/
+
+# 2. اختبر webhook يدوياً
+curl -X POST -H 'Content-type: application/json' \
+  --data '{"text":"Test from aaPanel"}' \
+  $SLACK_WEBHOOK_URL
+
+# 3. تحقق من alertmanager.yml
+cat alertmanager.yml | grep -A 5 "slack_configs"
+
+# 4. تحقق من expand-env في docker-compose
+cat docker-compose.yml | grep -A 3 "alertmanager:" | grep "expand-env"
+
+# يجب أن ترى:
+# - '--config.expand-env=true'
+
+# 5. افحص logs للأخطاء
+docker-compose logs alertmanager | grep -i "slack"
+
+# 6. أعد إنشاء webhook في Slack
+# راجع ALERTING_SETUP.md للتفاصيل
+
+# 7. أعد تشغيل Alertmanager بعد التغيير
+docker-compose down alertmanager
+docker-compose up -d alertmanager
+```
+
+---
+
+### المشكلة: مشاكل Email notifications
+
+**الأعراض**:
+- emails لا تصل
+- خطأ في SMTP authentication
+
+**الحل**:
+```bash
+# 1. تحقق من SMTP credentials في .env
+cat .env | grep SMTP_
+
+# 2. اختبر SMTP يدوياً
+python3 << 'EOF'
+import smtplib
+from email.mime.text import MIMEText
+import os
+
+msg = MIMEText("Test from aaPanel Alertmanager")
+msg['Subject'] = "Test Alert"
+msg['From'] = os.getenv('ALERT_EMAIL_FROM')
+msg['To'] = os.getenv('ALERT_EMAIL_TO')
+
+server = smtplib.SMTP(os.getenv('SMTP_HOST'), int(os.getenv('SMTP_PORT')))
+server.starttls()
+server.login(os.getenv('SMTP_USERNAME'), os.getenv('SMTP_PASSWORD'))
+server.send_message(msg)
+server.quit()
+print("✅ Email sent!")
+EOF
+
+# 3. للـ Gmail: تحقق من App Password
+# لا تستخدم كلمة المرور العادية!
+# راجع: https://myaccount.google.com/apppasswords
+
+# 4. تحقق من alertmanager.yml
+cat alertmanager.yml | grep -A 10 "email_configs"
+
+# 5. افحص logs
+docker-compose logs alertmanager | grep -i "email\|smtp"
+
+# 6. تحقق من firewall/ports
+# Port 587 (STARTTLS) يجب أن يكون مفتوحاً
+
+# 7. أعد تشغيل Alertmanager
+docker-compose restart alertmanager
+```
+
+---
+
+### المشكلة: Alert fatigue (كثرة التنبيهات)
+
+**الأعراض**:
+- تنبيهات كثيرة جداً
+- إشعارات متكررة
+- تجاهل التنبيهات المهمة
+
+**الحل**:
+```bash
+# 1. زيادة repeat_interval في alertmanager.yml
+# غيّر من:
+# repeat_interval: 4h
+# إلى:
+# repeat_interval: 12h  # أو 24h
+
+# 2. زيادة thresholds في prometheus-rules.yml
+# مثلاً للـ CPU:
+# من: aapanel_cpu_percent > 80
+# إلى: aapanel_cpu_percent > 85
+
+# 3. زيادة for duration
+# من: for: 5m
+# إلى: for: 10m
+
+# 4. استخدام inhibition rules
+# في alertmanager.yml:
+# inhibit_rules:
+#   - source_match:
+#       severity: 'critical'
+#     target_match:
+#       severity: 'warning'
+#     equal: ['alertname']
+
+# 5. تجميع التنبيهات
+# في alertmanager.yml:
+# group_by: ['alertname', 'severity']
+# group_wait: 30s
+# group_interval: 10m
+
+# 6. إنشاء routes مختلفة حسب severity
+# critical → Slack + Email
+# warning → Slack فقط
+# info → لا شيء
+
+# 7. أعد تشغيل بعد التغييرات
+docker-compose restart alertmanager prometheus
+```
+
+---
+
+## 🔄 مشاكل Blue-Green Deployment
+
+### المشكلة: فشل التبديل بين البيئات
+
+**الأعراض**:
+- nginx لا يوجه للبيئة الجديدة
+- المستخدمون يرون الإصدار القديم
+
+**الحل**:
+```bash
+# 1. تحقق من البيئة النشطة حالياً
+cat /etc/nginx/conf.d/upstream.conf
+
+# 2. تحقق من nginx configuration
+sudo nginx -t
+
+# 3. اختبر البيئات يدوياً
+curl http://localhost:5001/health  # Blue
+curl http://localhost:5002/health  # Green
+
+# 4. تحقق من سكريبت التبديل
+cat scripts/switch_blue_green.sh
+
+# 5. شغّل التبديل يدوياً
+sudo ./scripts/switch_blue_green.sh green
+
+# 6. تحقق من nginx reload
+sudo systemctl status nginx
+
+# 7. افحص nginx error log
+sudo tail -f /var/log/nginx/error.log
+
+# 8. أعد تحميل nginx يدوياً
+sudo nginx -s reload
+# أو
+sudo systemctl reload nginx
+```
+
+---
+
+### المشكلة: مشاكل health checks
+
+**الأعراض**:
+- health check يفشل رغم أن الخدمة تعمل
+- Deployment يتوقف عند health check
+
+**الحل**:
+```bash
+# 1. اختبر health endpoint يدوياً
+curl -v http://localhost:5002/health/ready
+
+# 2. تحقق من الـ response
+# يجب أن يكون: {"status": "healthy"}
+
+# 3. تحقق من الكود
+# في health_routes.py:
+# @health_bp.route('/ready')
+
+# 4. زد timeout في سكريبت التبديل
+# في switch_blue_green.sh:
+# HEALTH_CHECK_TIMEOUT=60  # من 30
+
+# 5. تحقق من dependencies (DB, Redis)
+docker-compose ps postgres redis
+
+# 6. افحص logs التطبيق
+docker-compose logs green_app | grep -i "health"
+
+# 7. تحقق من DB migrations
+# قد يكون health check يفشل بسبب migrations غير مطبقة
+
+# 8. اختبر في حاوية مؤقتة
+docker run --rm --network aapanel_network alpine/curl \
+  curl http://green_app:5000/health/ready
+```
+
+---
+
+### المشكلة: مشاكل nginx switching
+
+**الأعراض**:
+- nginx لا يتعرف على البيئة الجديدة
+- خطأ "upstream not found"
+
+**الحل**:
+```bash
+# 1. تحقق من upstream configuration
+cat /etc/nginx/conf.d/upstream.conf
+
+# يجب أن يحتوي على:
+# upstream aapanel_backend {
+#     server blue_app:5000;  # أو green_app:5000
+# }
+
+# 2. تحقق من Docker network
+docker network inspect aapanel_network
+
+# 3. تحقق من أسماء containers
+docker-compose ps | grep app
+
+# 4. اختبر DNS resolution من nginx
+docker exec -it nginx ping blue_app
+docker exec -it nginx ping green_app
+
+# 5. تحقق من nginx.conf
+cat /etc/nginx/sites-available/aapanel
+
+# 6. أعد بناء upstream.conf
+echo "upstream aapanel_backend {
+    server green_app:5000;
+}" | sudo tee /etc/nginx/conf.d/upstream.conf
+
+# 7. اختبر nginx config
+sudo nginx -t
+
+# 8. أعد تحميل nginx
+sudo systemctl reload nginx
+```
+
+---
+
+### المشكلة: Rollback issues
+
+**الأعراض**:
+- rollback لا يعمل
+- لا يمكن العودة للإصدار السابق
+
+**الحل**:
+```bash
+# 1. تحقق من البيئة النشطة
+cat /etc/nginx/conf.d/upstream.conf
+
+# 2. تحقق من أن البيئة القديمة لا تزال تعمل
+docker-compose ps blue_app green_app
+
+# 3. rollback يدوي
+# إذا كنت على green، ارجع إلى blue:
+sudo ./scripts/switch_blue_green.sh blue
+
+# 4. تحقق من docker images
+docker images | grep aapanel
+
+# يجب أن ترى versions متعددة
+
+# 5. شغّل الإصدار القديم يدوياً
+docker-compose -f docker-compose.blue.yml up -d
+
+# 6. اختبر قبل التبديل
+curl http://localhost:5001/health
+
+# 7. بدّل nginx
+sudo ./scripts/switch_blue_green.sh blue
+
+# 8. إذا فشل كل شيء، استخدم backup
+# استعد من آخر نسخة احتياطية:
+python backups/backup_manager.py --restore backup_latest.tar.gz
+
+# 9. وثّق السبب
+# أضف ملاحظات في logs حول سبب الـ rollback
 ```
 
 ---
