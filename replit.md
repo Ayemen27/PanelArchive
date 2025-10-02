@@ -51,6 +51,18 @@ The project uses Python 3.12 and the Flask framework, served with Gunicorn in pr
 
 ## Recent Changes
 
+### October 2, 2025 - Agent #35
+**Critical Import Fix** ✅ Completed
+- **Issue Found:** Direct import `from BTPanel import app` was failing with `ModuleNotFoundError: No module named 'public'`
+- **Root Cause:** `class` directory was not in `sys.path` when BTPanel was imported directly (only worked via runserver.py)
+- **Solution Applied:**
+  - ✅ Added sys.path setup in `BTPanel/__init__.py` before importing `hook_import`
+  - ✅ Both `class` and `class_v2` directories now added to sys.path automatically
+  - ✅ Application now works in all import scenarios
+- **Testing:** ✅ Verified successful import and application startup on port 39417
+- **Files Modified:** `BTPanel/__init__.py` (lines 9-20)
+- **Status:** Production-ready - import issue resolved
+
 ### October 2, 2025 - Agent #34
 **Phase 8: Replit Full Compatibility** ✅ Completed
 - **Major Achievement:** Application now runs successfully in both Replit and VPS environments

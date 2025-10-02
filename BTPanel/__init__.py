@@ -7,6 +7,19 @@
 # | Author: hwliang <hwl@aapanel.com>
 # +---
 
+import sys
+import os
+
+# Add class and class_v2 to sys.path to support imports
+_current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_class_path = os.path.join(_current_dir, 'class')
+_class_v2_path = os.path.join(_current_dir, 'class_v2')
+
+if _class_path not in sys.path:
+    sys.path.insert(0, _class_path)
+if _class_v2_path not in sys.path:
+    sys.path.insert(0, _class_v2_path)
+
 from public.hook_import import hook_import
 hook_import()
 
