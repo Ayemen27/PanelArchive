@@ -8,10 +8,23 @@ aaPanel is a powerful server management control panel built with Python/Flask. I
 - يجب تحديث حالة كل مهمة فور إنجازها
 - توثيق واضح لما تم إنجازه وما تبقى
 - تمكين الفريق من معرفة نقطة التوقف ونقطة الاستكمال
+- 🔴 **إلزامي:** مراجعة `تقارير_مراجعة_ارشكتر.md` قبل البدء بأي مهمة
 
 ### التواصل
 - **اللغة المفضلة**: العربية فقط في جميع الردود
 - التوثيق يجب أن يكون واضح ومفصل
+
+### 🔴 ملف تقارير Architect (إلزامي)
+**جميع الوكلاء يجب أن:**
+1. ✅ يقرأوا `تقارير_مراجعة_ارشكتر.md` قبل البدء
+2. ✅ يحدثوا الملف عند حل أي مشكلة
+3. ✅ يضيفوا مشاكل جديدة يكتشفها Architect
+4. ✅ يوثقوا طريقة الحل والسبب
+
+**الملف يحتوي على:**
+- 10 مشاكل مكتشفة من مراجعة Architect الشاملة
+- 1 محلولة (10%)، 9 تحتاج حل (90%)
+- خطة عمل مفصلة لحل المشاكل المتبقية
 
 ## System Architecture
 The project uses Python 3.12 and the Flask framework, served with Gunicorn in production. Core architectural decisions include a Factory Pattern for configuration management, an environment detector for runtime identification (Replit or VPS), and a validator for configuration.
@@ -50,6 +63,19 @@ The project uses Python 3.12 and the Flask framework, served with Gunicorn in pr
 -   **Database Migration:** Alembic, Flask-Migrate
 
 ## Recent Changes
+
+### October 2, 2025 - Agent #35
+**Phase 9 Added: Fixing Discovered Issues** 🚀 In Progress
+- **Major Update:** Added comprehensive Phase 9 to fix all issues discovered by Architect review
+- **10 Tasks Created:** Prioritized by severity (Critical → High → Medium)
+- **Implementation:**
+  - 🔥 Critical tasks (2): db_pool integration, backup_manager scheduling
+  - ⚠️ High priority tasks (4): CI/CD, Monitoring, Backup tests, VPS security
+  - 💡 Medium priority tasks (4): SECRET_KEY, health endpoints tests, Docker builds, Documentation
+- **Time Estimate:** 9-10 hours total
+- **Reference:** `تقارير_مراجعة_ارشكتر.md` for complete details
+- **Updated Files:** خطة_التطوير.md, ملخص_الخطة.md, قائمة_التحقق.md
+- **Status:** Ready for implementation - prioritized roadmap created
 
 ### October 2, 2025 - Agent #35
 **Critical Import Fix** ✅ Completed
