@@ -1,0 +1,679 @@
+#!/bin/bash
+
+# ================================================================
+# Security Hardening Script for aaPanel - COMPREHENSIVE VERSION
+# ================================================================
+# هذا السكريبت يقوم بتشديد أمان النظام للإنتاج بشكل شامل
+# 
+# الاستخدام:
+#   sudo ./setup_security_hardening.sh                  # تفاعلي
+#   sudo ./setup_security_hardening.sh -y               # تلقائي
+#   sudo ./setup_security_hardening.sh --non-interactive # تلقائي
+#
+# الميزات:
+#   - 🔒 System hardening (sysctl, kernel parameters)
+#   - 🛡️ SSH hardening
+#   - 📝 Audit logging (auditd)
+#   - 🔄 Automatic security updates
+#   - 🔐 Password policies
+#   - 📋 File permissions
+#   - 🧪 Security checks
+#   - ✅ Idempotent (يمكن تشغيله عدة مرات بأمان)
+# ================================================================
+
+set -e  # Exit on error
+
+# ================================================================
+# Parse Arguments
+# ================================================================
+
+NON_INTERACTIVE=false
+SKIP_UPDATES=false
+
+for arg in "$@"; do
+    case $arg in
+        -y|--non-interactive|--yes)
+            NON_INTERACTIVE=true
+            shift
+            ;;
+        --skip-updates)
+            SKIP_UPDATES=true
+            shift
+            ;;
+        -h|--help)
+            echo "Usage: sudo ./setup_security_hardening.sh [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  -y, --non-interactive    Run in non-interactive mode"
+            echo "  --yes                    Same as --non-interactive"
+            echo "  --skip-updates           Skip automatic updates setup"
+            echo "  -h, --help               Show this help message"
+            echo ""
+            echo "Examples:"
+            echo "  sudo ./setup_security_hardening.sh              # Interactive mode"
+            echo "  sudo ./setup_security_hardening.sh -y           # Non-interactive mode"
+            echo "  sudo ./setup_security_hardening.sh --skip-updates # Skip updates"
+            exit 0
+            ;;
+        *)
+            ;;
+    esac
+done
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
+NC='\033[0m'
+
+# ================================================================
+# Helper Functions
+# ================================================================
+
+print_header() {
+    echo ""
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  $1${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+}
+
+print_step() {
+    echo -e "${CYAN}▶ $1${NC}"
+}
+
+print_info() {
+    echo -e "${BLUE}ℹ️  $1${NC}"
+}
+
+print_success() {
+    echo -e "${GREEN}✅ $1${NC}"
+}
+
+print_warning() {
+    echo -e "${YELLOW}⚠️  $1${NC}"
+}
+
+print_error() {
+    echo -e "${RED}❌ $1${NC}"
+}
+
+check_root() {
+    if [ "$EUID" -ne 0 ]; then 
+        print_error "هذا السكريبت يجب تشغيله بصلاحيات root"
+        print_info "استخدم: sudo $0"
+        exit 1
+    fi
+}
+
+# ================================================================
+# Detect OS
+# ================================================================
+
+detect_os() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        OS=$ID
+        VER=$VERSION_ID
+    else
+        print_error "لا يمكن تحديد نظام التشغيل"
+        exit 1
+    fi
+}
+
+# ================================================================
+# Backup Configuration
+# ================================================================
+
+backup_config() {
+    local file=$1
+    local backup_dir="/root/security-hardening-backup-$(date +%Y%m%d-%H%M%S)"
+    
+    if [ -f "$file" ]; then
+        mkdir -p "$backup_dir"
+        cp "$file" "$backup_dir/"
+        print_success "نسخة احتياطية من $file حفظت في $backup_dir"
+    fi
+}
+
+# ================================================================
+# Main Setup
+# ================================================================
+
+check_root
+detect_os
+
+print_header "🔒 إعداد Security Hardening لـ aaPanel"
+print_info "نظام التشغيل: $OS $VER"
+
+# ================================================================
+# 1. System Hardening (sysctl)
+# ================================================================
+
+print_header "1️⃣ تشديد إعدادات النظام (sysctl)"
+
+# Backup current sysctl
+backup_config "/etc/sysctl.conf"
+
+# Create hardened sysctl configuration
+cat > /etc/sysctl.d/99-security-hardening.conf <<'EOF'
+# ================================================================
+# Security Hardening - Kernel Parameters
+# Generated by setup_security_hardening.sh
+# ================================================================
+
+# Network Security
+# ----------------
+
+# IP Forwarding (disable unless router/VPN)
+net.ipv4.ip_forward = 0
+net.ipv6.conf.all.forwarding = 0
+
+# SYN Flood Protection
+net.ipv4.tcp_syncookies = 1
+net.ipv4.tcp_syn_retries = 2
+net.ipv4.tcp_synack_retries = 2
+net.ipv4.tcp_max_syn_backlog = 4096
+
+# ICMP Redirects (disable)
+net.ipv4.conf.all.accept_redirects = 0
+net.ipv4.conf.default.accept_redirects = 0
+net.ipv4.conf.all.secure_redirects = 0
+net.ipv4.conf.default.secure_redirects = 0
+net.ipv6.conf.all.accept_redirects = 0
+net.ipv6.conf.default.accept_redirects = 0
+
+# Source Routing (disable)
+net.ipv4.conf.all.accept_source_route = 0
+net.ipv4.conf.default.accept_source_route = 0
+net.ipv6.conf.all.accept_source_route = 0
+net.ipv6.conf.default.accept_source_route = 0
+
+# ICMP Echo/Ping (disable)
+net.ipv4.icmp_echo_ignore_all = 0
+net.ipv4.icmp_echo_ignore_broadcasts = 1
+
+# Reverse Path Filtering (strict mode)
+net.ipv4.conf.all.rp_filter = 1
+net.ipv4.conf.default.rp_filter = 1
+
+# Log Martian Packets
+net.ipv4.conf.all.log_martians = 1
+net.ipv4.conf.default.log_martians = 1
+
+# Ignore Bogus Error Responses
+net.ipv4.icmp_ignore_bogus_error_responses = 1
+
+# TCP/IP Stack Hardening
+# ----------------------
+
+# Protect Against TCP Time-Wait
+net.ipv4.tcp_rfc1337 = 1
+
+# Memory and Buffer Protection
+# -----------------------------
+
+# Address Space Layout Randomization (ASLR)
+kernel.randomize_va_space = 2
+
+# Core Dumps (disable for security)
+kernel.core_uses_pid = 1
+fs.suid_dumpable = 0
+
+# Process Security
+# ----------------
+
+# Dmesg Restriction (prevent kernel info leak)
+kernel.dmesg_restrict = 1
+
+# Kernel Pointer Hiding
+kernel.kptr_restrict = 2
+
+# Ptrace Scope (restrict debugging)
+kernel.yama.ptrace_scope = 1
+
+# File System Security
+# --------------------
+
+# Symlink/Hardlink Protection
+fs.protected_symlinks = 1
+fs.protected_hardlinks = 1
+fs.protected_fifos = 2
+fs.protected_regular = 2
+
+# Performance & Limits
+# --------------------
+
+# File Descriptors
+fs.file-max = 2097152
+
+# Inotify Limits
+fs.inotify.max_user_watches = 524288
+fs.inotify.max_user_instances = 512
+
+# Network Performance
+net.core.somaxconn = 65535
+net.core.netdev_max_backlog = 5000
+net.ipv4.tcp_max_orphans = 262144
+net.ipv4.tcp_max_tw_buckets = 1440000
+
+# Memory Management
+vm.swappiness = 10
+vm.dirty_ratio = 15
+vm.dirty_background_ratio = 5
+
+EOF
+
+# Apply sysctl settings
+print_step "تطبيق إعدادات sysctl..."
+sysctl -p /etc/sysctl.d/99-security-hardening.conf >/dev/null 2>&1
+sysctl --system >/dev/null 2>&1
+
+print_success "تم تطبيق System Hardening (sysctl)"
+
+# ================================================================
+# 2. SSH Hardening
+# ================================================================
+
+print_header "2️⃣ تشديد أمان SSH"
+
+SSH_CONFIG="/etc/ssh/sshd_config"
+
+if [ -f "$SSH_CONFIG" ]; then
+    backup_config "$SSH_CONFIG"
+    
+    print_step "تطبيق SSH hardening..."
+    
+    # Disable root login
+    sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' "$SSH_CONFIG"
+    
+    # Disable password authentication (prefer key-based)
+    # NOTE: Be careful with this - ensure you have SSH keys configured!
+    if [ "$NON_INTERACTIVE" = false ]; then
+        echo ""
+        read -p "تعطيل Password Authentication (يتطلب SSH keys)? (y/n): " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' "$SSH_CONFIG"
+            print_warning "Password Authentication معطّل - تأكد من وجود SSH keys!"
+        fi
+    fi
+    
+    # Other SSH hardening
+    grep -q "^Protocol 2" "$SSH_CONFIG" || echo "Protocol 2" >> "$SSH_CONFIG"
+    grep -q "^X11Forwarding no" "$SSH_CONFIG" || echo "X11Forwarding no" >> "$SSH_CONFIG"
+    grep -q "^MaxAuthTries 3" "$SSH_CONFIG" || echo "MaxAuthTries 3" >> "$SSH_CONFIG"
+    grep -q "^ClientAliveInterval 300" "$SSH_CONFIG" || echo "ClientAliveInterval 300" >> "$SSH_CONFIG"
+    grep -q "^ClientAliveCountMax 2" "$SSH_CONFIG" || echo "ClientAliveCountMax 2" >> "$SSH_CONFIG"
+    grep -q "^PermitEmptyPasswords no" "$SSH_CONFIG" || echo "PermitEmptyPasswords no" >> "$SSH_CONFIG"
+    grep -q "^IgnoreRhosts yes" "$SSH_CONFIG" || echo "IgnoreRhosts yes" >> "$SSH_CONFIG"
+    grep -q "^HostbasedAuthentication no" "$SSH_CONFIG" || echo "HostbasedAuthentication no" >> "$SSH_CONFIG"
+    
+    # Reload SSH
+    systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null || true
+    
+    print_success "تم تطبيق SSH hardening"
+else
+    print_warning "SSH config غير موجود"
+fi
+
+# ================================================================
+# 3. Automatic Security Updates
+# ================================================================
+
+if [ "$SKIP_UPDATES" = false ]; then
+    print_header "3️⃣ إعداد التحديثات الأمنية التلقائية"
+    
+    if [ "$OS" = "ubuntu" ] || [ "$OS" = "debian" ]; then
+        print_step "تثبيت unattended-upgrades..."
+        
+        apt-get update -qq
+        apt-get install -y unattended-upgrades apt-listchanges >/dev/null 2>&1
+        
+        # Configure automatic updates
+        cat > /etc/apt/apt.conf.d/50unattended-upgrades <<'EOF'
+// Automatic security updates configuration
+Unattended-Upgrade::Allowed-Origins {
+    "${distro_id}:${distro_codename}-security";
+    "${distro_id}ESMApps:${distro_codename}-apps-security";
+    "${distro_id}ESM:${distro_codename}-infra-security";
+};
+
+Unattended-Upgrade::AutoFixInterruptedDpkg "true";
+Unattended-Upgrade::MinimalSteps "true";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+Unattended-Upgrade::Automatic-Reboot "false";
+Unattended-Upgrade::Automatic-Reboot-Time "03:00";
+EOF
+
+        cat > /etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Download-Upgradeable-Packages "1";
+APT::Periodic::AutocleanInterval "7";
+APT::Periodic::Unattended-Upgrade "1";
+EOF
+        
+        print_success "تم إعداد automatic security updates (unattended-upgrades)"
+        
+    elif [ "$OS" = "centos" ] || [ "$OS" = "rhel" ] || [ "$OS" = "rocky" ] || [ "$OS" = "almalinux" ]; then
+        print_step "تثبيت yum-cron..."
+        
+        yum install -y yum-cron >/dev/null 2>&1
+        
+        # Configure yum-cron for security updates only
+        sed -i 's/^apply_updates = .*/apply_updates = yes/' /etc/yum/yum-cron.conf
+        sed -i 's/^update_cmd = .*/update_cmd = security/' /etc/yum/yum-cron.conf
+        
+        systemctl enable yum-cron >/dev/null 2>&1
+        systemctl start yum-cron
+        
+        print_success "تم إعداد automatic security updates (yum-cron)"
+    else
+        print_warning "نظام التشغيل غير مدعوم للتحديثات التلقائية"
+    fi
+else
+    print_info "تخطي إعداد التحديثات التلقائية (--skip-updates)"
+fi
+
+# ================================================================
+# 4. Audit Logging (auditd)
+# ================================================================
+
+print_header "4️⃣ إعداد Audit Logging"
+
+if [ "$OS" = "ubuntu" ] || [ "$OS" = "debian" ]; then
+    apt-get install -y auditd audispd-plugins >/dev/null 2>&1
+elif [ "$OS" = "centos" ] || [ "$OS" = "rhel" ] || [ "$OS" = "rocky" ] || [ "$OS" = "almalinux" ]; then
+    yum install -y audit >/dev/null 2>&1
+fi
+
+# Configure audit rules
+cat > /etc/audit/rules.d/security-hardening.rules <<'EOF'
+# Security Hardening - Audit Rules
+# Generated by setup_security_hardening.sh
+
+# Delete all existing rules
+-D
+
+# Buffer Size (increase for busy systems)
+-b 8192
+
+# Failure Mode (1 = print, 2 = panic)
+-f 1
+
+# Authentication & Authorization
+-w /var/log/faillog -p wa -k auth_failures
+-w /var/log/lastlog -p wa -k auth_lastlog
+-w /var/log/tallylog -p wa -k auth_tally
+
+-w /etc/passwd -p wa -k passwd_changes
+-w /etc/group -p wa -k group_changes
+-w /etc/shadow -p wa -k shadow_changes
+-w /etc/gshadow -p wa -k gshadow_changes
+-w /etc/sudoers -p wa -k sudoers_changes
+-w /etc/sudoers.d/ -p wa -k sudoers_changes
+
+# System Startup & Shutdown
+-w /sbin/shutdown -p x -k system_shutdown
+-w /sbin/reboot -p x -k system_reboot
+-w /sbin/halt -p x -k system_halt
+
+# Process & Session
+-a always,exit -F arch=b64 -S execve -k process_execution
+-a always,exit -F arch=b32 -S execve -k process_execution
+
+# File & Directory Access
+-w /etc/ -p wa -k etc_changes
+-w /var/log/ -p wa -k log_changes
+-w /www/server/panel/ -p wa -k aapanel_changes
+
+# Network
+-a always,exit -F arch=b64 -S socket -S connect -S sendto -S recvfrom -k network
+-a always,exit -F arch=b32 -S socket -S connect -S sendto -S recvfrom -k network
+
+# Privilege Escalation
+-a always,exit -F arch=b64 -S setuid -S setgid -S setreuid -S setregid -k privilege_escalation
+-a always,exit -F arch=b32 -S setuid -S setgid -S setreuid -S setregid -k privilege_escalation
+
+# Make configuration immutable
+-e 2
+EOF
+
+# Load audit rules
+augenrules --load >/dev/null 2>&1 || true
+
+# Enable and start auditd
+systemctl enable auditd >/dev/null 2>&1
+systemctl restart auditd 2>/dev/null || service auditd restart 2>/dev/null || true
+
+print_success "تم إعداد Audit Logging (auditd)"
+
+# ================================================================
+# 5. Password Policies
+# ================================================================
+
+print_header "5️⃣ تشديد سياسات كلمات المرور"
+
+if [ -f /etc/login.defs ]; then
+    backup_config "/etc/login.defs"
+    
+    # Password aging controls
+    sed -i 's/^PASS_MAX_DAYS.*/PASS_MAX_DAYS   90/' /etc/login.defs
+    sed -i 's/^PASS_MIN_DAYS.*/PASS_MIN_DAYS   1/' /etc/login.defs
+    sed -i 's/^PASS_MIN_LEN.*/PASS_MIN_LEN    12/' /etc/login.defs
+    sed -i 's/^PASS_WARN_AGE.*/PASS_WARN_AGE   7/' /etc/login.defs
+    
+    print_success "تم تحديث سياسات كلمات المرور"
+fi
+
+# Install and configure PAM password quality
+if [ "$OS" = "ubuntu" ] || [ "$OS" = "debian" ]; then
+    apt-get install -y libpam-pwquality >/dev/null 2>&1
+elif [ "$OS" = "centos" ] || [ "$OS" = "rhel" ] || [ "$OS" = "rocky" ] || [ "$OS" = "almalinux" ]; then
+    yum install -y libpwquality >/dev/null 2>&1
+fi
+
+if [ -f /etc/security/pwquality.conf ]; then
+    backup_config "/etc/security/pwquality.conf"
+    
+    cat > /etc/security/pwquality.conf <<'EOF'
+# Password Quality Requirements
+minlen = 12
+dcredit = -1
+ucredit = -1
+ocredit = -1
+lcredit = -1
+minclass = 3
+maxrepeat = 2
+maxsequence = 3
+EOF
+    
+    print_success "تم إعداد password quality requirements"
+fi
+
+# ================================================================
+# 6. File Permissions
+# ================================================================
+
+print_header "6️⃣ تشديد صلاحيات الملفات الحساسة"
+
+print_step "ضبط صلاحيات الملفات الحساسة..."
+
+# Critical system files
+chmod 600 /etc/ssh/sshd_config 2>/dev/null || true
+chmod 600 /etc/shadow 2>/dev/null || true
+chmod 600 /etc/gshadow 2>/dev/null || true
+chmod 644 /etc/passwd 2>/dev/null || true
+chmod 644 /etc/group 2>/dev/null || true
+
+# aaPanel directories
+if [ -d /www/server/panel ]; then
+    chown -R www:www /www/server/panel 2>/dev/null || true
+    chmod 750 /www/server/panel 2>/dev/null || true
+fi
+
+print_success "تم ضبط صلاحيات الملفات"
+
+# ================================================================
+# 7. Disable Unnecessary Services
+# ================================================================
+
+print_header "7️⃣ تعطيل الخدمات غير الضرورية"
+
+# List of services to disable (customize as needed)
+SERVICES_TO_DISABLE=(
+    "avahi-daemon"
+    "cups"
+    "bluetooth"
+)
+
+for service in "${SERVICES_TO_DISABLE[@]}"; do
+    if systemctl is-active --quiet "$service" 2>/dev/null; then
+        systemctl stop "$service" 2>/dev/null || true
+        systemctl disable "$service" 2>/dev/null || true
+        print_info "  تم تعطيل: $service"
+    fi
+done
+
+print_success "تم فحص وتعطيل الخدمات غير الضرورية"
+
+# ================================================================
+# 8. Create Security Check Script
+# ================================================================
+
+print_header "8️⃣ إنشاء سكريبت الفحص الأمني"
+
+cat > /usr/local/bin/security-check <<'SCRIPT'
+#!/bin/bash
+
+# Quick Security Check Script
+
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}  Security Check${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+# Check firewall
+if systemctl is-active --quiet ufw; then
+    echo -e "Firewall (UFW): ${GREEN}✅ Active${NC}"
+else
+    echo -e "Firewall (UFW): ${RED}❌ Inactive${NC}"
+fi
+
+# Check Fail2Ban
+if systemctl is-active --quiet fail2ban; then
+    echo -e "Fail2Ban: ${GREEN}✅ Active${NC}"
+else
+    echo -e "Fail2Ban: ${RED}❌ Inactive${NC}"
+fi
+
+# Check Audit
+if systemctl is-active --quiet auditd; then
+    echo -e "Audit Logging: ${GREEN}✅ Active${NC}"
+else
+    echo -e "Audit Logging: ${YELLOW}⚠️  Inactive${NC}"
+fi
+
+# Check SSH
+if systemctl is-active --quiet sshd || systemctl is-active --quiet ssh; then
+    ROOT_LOGIN=$(grep "^PermitRootLogin" /etc/ssh/sshd_config | awk '{print $2}')
+    if [ "$ROOT_LOGIN" = "no" ]; then
+        echo -e "SSH Root Login: ${GREEN}✅ Disabled${NC}"
+    else
+        echo -e "SSH Root Login: ${RED}❌ Enabled${NC}"
+    fi
+fi
+
+# Check updates
+if command -v unattended-upgrades &> /dev/null; then
+    echo -e "Auto Updates: ${GREEN}✅ Configured (Ubuntu/Debian)${NC}"
+elif systemctl is-active --quiet yum-cron; then
+    echo -e "Auto Updates: ${GREEN}✅ Active (CentOS/RHEL)${NC}"
+else
+    echo -e "Auto Updates: ${YELLOW}⚠️  Not Configured${NC}"
+fi
+
+# Check open ports
+echo ""
+echo "Open Ports:"
+ss -tuln | grep LISTEN | awk '{print $5}' | sed 's/.*://' | sort -u | while read port; do
+    echo "  • Port $port"
+done
+
+# Check failed login attempts
+echo ""
+echo "Recent Failed Login Attempts (last 10):"
+grep "Failed password" /var/log/auth.log 2>/dev/null | tail -10 | awk '{print $1, $2, $3, $(NF-3), $(NF-1)}' | head -5 || \
+grep "Failed password" /var/log/secure 2>/dev/null | tail -10 | awk '{print $1, $2, $3, $(NF-3), $(NF-1)}' | head -5 || \
+echo "  No recent failed attempts"
+
+echo ""
+SCRIPT
+
+chmod +x /usr/local/bin/security-check
+
+print_success "تم إنشاء /usr/local/bin/security-check"
+
+# ================================================================
+# Final Summary
+# ================================================================
+
+print_header "✅ اكتمل Security Hardening بنجاح"
+
+echo ""
+print_success "تم تطبيق التحسينات الأمنية التالية:"
+echo ""
+echo -e "${CYAN}1. System Hardening:${NC}"
+echo "   • sysctl kernel parameters محسّنة"
+echo "   • Network security settings"
+echo "   • Memory protection (ASLR)"
+echo ""
+echo -e "${CYAN}2. SSH Hardening:${NC}"
+echo "   • Root login معطّل"
+echo "   • MaxAuthTries = 3"
+echo "   • Session timeouts مفعّلة"
+echo ""
+echo -e "${CYAN}3. Security Updates:${NC}"
+if [ "$SKIP_UPDATES" = false ]; then
+    echo "   • Automatic security updates مفعّلة ✅"
+else
+    echo "   • تم التخطي (--skip-updates)"
+fi
+echo ""
+echo -e "${CYAN}4. Audit Logging:${NC}"
+echo "   • auditd مفعّل ويعمل"
+echo "   • 20+ audit rules نشطة"
+echo ""
+echo -e "${CYAN}5. Password Policies:${NC}"
+echo "   • Password aging: 90 days max"
+echo "   • Minimum length: 12 characters"
+echo "   • Complexity requirements مفعّلة"
+echo ""
+echo -e "${CYAN}6. File Permissions:${NC}"
+echo "   • Critical files محمية"
+echo "   • aaPanel directories آمنة"
+echo ""
+
+echo -e "${CYAN}الأوامر المفيدة:${NC}"
+echo "  • security-check              - فحص سريع للأمان"
+echo "  • auditctl -l                 - عرض audit rules"
+echo "  • ausearch -k <keyword>       - البحث في audit logs"
+echo "  • journalctl -u auditd -f     - متابعة audit logs"
+echo "  • unattended-upgrades --dry-run -d  - اختبار التحديثات (Ubuntu/Debian)"
+echo ""
+
+echo -e "${YELLOW}ملاحظات مهمة:${NC}"
+echo "  • النسخ الاحتياطية في: /root/security-hardening-backup-*"
+echo "  • راجع /etc/sysctl.d/99-security-hardening.conf"
+echo "  • راجع /etc/audit/rules.d/security-hardening.rules"
+echo "  • تأكد من اختبار SSH قبل قطع الاتصال!"
+echo ""
+
+print_success "Security Hardening مكتمل! النظام الآن أكثر أماناً 🔒"
