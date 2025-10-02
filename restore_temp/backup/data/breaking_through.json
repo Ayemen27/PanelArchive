@@ -1,0 +1,1 @@
+{"based_on_username": {"limit": 5, "count": 8, "type": 0, "limit_root": false}, "based_on_ip": {"limit": 5, "count": 8, "command": "", "ipset_filter": true}, "history_limit": 60, "history_start": 0, "global_status": true, "username_status": false, "ip_status": false}
