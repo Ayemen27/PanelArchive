@@ -48,3 +48,38 @@ The project uses Python 3.12 and the Flask framework, served with Gunicorn in pr
 -   **Notification Channels:** Slack, Email (SMTP)
 -   **Centralized Logging:** Grafana Loki, Promtail
 -   **Database Migration:** Alembic, Flask-Migrate
+
+## Recent Changes
+
+### October 2, 2025 - Agent #32
+**Task 7.3: Developer Documentation** ✅ Completed
+- Created `CONTRIBUTING.md` - Comprehensive contribution guide with coding standards, Git workflow, testing requirements, and PR process
+- Created `DEVELOPER_GUIDE.md` - Complete developer onboarding guide with quick start, project structure, development setup, and common tasks
+- **Architect Review:** Pass ✅ - Both guides accurately reflect the repository's architecture and provide clear bilingual guidance
+- **Files:** CONTRIBUTING.md (comprehensive), DEVELOPER_GUIDE.md (complete)
+- **Status:** Production-ready - guides ready for team distribution and linking from README
+
+### October 1, 2025
+**Major Updates:**
+- **Security Hardening (6.4):** Complete system hardening with setup_security_hardening.sh, security_check.sh, and comprehensive SECURITY_HARDENING_GUIDE.md
+- **Firewall (6.2):** IPv6 bug fix in setup_firewall.sh - eliminates SSH lockout risk
+- **Fail2Ban (6.3):** Critical IP extraction fix in aapanel filter (multi-IP scenarios)
+- **Centralized Logging (5.4):** Loki + Promtail integration with structured JSON logging and 7-day retention
+- **Alerting (5.3):** 11 alert rules with Slack/Email notifications via Alertmanager
+- **Monitoring (5.2):** Prometheus + Grafana setup with auto-provisioned dashboards (after 4 architect iterations)
+- **Health Endpoints (5.1):** /health/live, /health/ready, /health/metrics with system monitoring
+- **Connection Pool (4.3):** db_pool.py with retry logic and pool statistics
+- **Backup System (4.2):** SHA-256 + HMAC security upgrade with backward compatibility for MD5 backups
+- **Database Migrations (4.1):** Alembic integration with migration_validator.py (13 tests, 100% pass)
+
+### September 30, 2025
+**Infrastructure & CI/CD Completed:**
+- **Blue-Green Deployment (3.4):** Zero-downtime deployment with automatic rollback
+- **VPS Deployment (3.3):** Automated deployment workflow with health checks
+- **Docker Build (3.2):** Multi-platform builds with SBOM and vulnerability scanning
+- **Testing Pipeline (3.1):** 96 pytest tests, linting (Flake8, Black, isort), security scanning
+- **systemd (2.4):** Production-ready service with virtualenv and security hardening
+- **Nginx (2.3):** A+ SSL rating configuration with Let's Encrypt integration
+- **Docker Compose (2.2):** Production and development environments with PostgreSQL + Redis
+- **Docker (2.1):** Multi-stage Dockerfile with Gunicorn + GeventWebSocketWorker
+- **Infrastructure (1.1-1.4):** environment_detector, config_factory, .env validation, runserver.py integration
