@@ -6678,9 +6678,22 @@ def init_cdn_config(app):
 
 init_cdn_config(app)
 
+# Initialize Database Connection Pool
+try:
+    from db_pool import DatabaseConnectionPool
+    from config_factory import get_config
+    
+    _config = get_config()
+    db_pool = DatabaseConnectionPool(config=_config)
+    print(f"✅ Database connection pool initialized successfully")
+except Exception as e:
+    db_pool = None
+    print(f"⚠️  Database pool initialization failed: {e}")
+
 # Register Health Endpoints
 try:
     from health_endpoints import register_health_routes
-    register_health_routes(app)
+    register_health_routes(app, db_pool=db_pool)
+    print(f"✅ Health endpoints registered successfully")
 except ImportError as e:
     print(f"Warning: Could not register health endpoints: {e}")

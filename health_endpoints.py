@@ -20,18 +20,6 @@ health_bp = Blueprint('health', __name__, url_prefix='/health')
 
 app_start_time = time.time()
 
-try:
-    from config_factory import get_config
-    config = get_config()
-except ImportError:
-    config = None
-
-try:
-    from db_pool import DatabaseConnectionPool
-    db_pool = DatabaseConnectionPool(config=config)
-except ImportError:
-    db_pool = None
-
 
 def get_uptime() -> float:
     """الحصول على uptime التطبيق بالثواني"""
@@ -45,6 +33,9 @@ def check_database() -> Tuple[bool, str]:
     Returns:
         Tuple[bool, str]: (حالة الصحة, رسالة)
     """
+    from flask import current_app
+    db_pool = current_app.config.get('DB_POOL')
+    
     if not db_pool:
         return False, "Database pool not available"
     
@@ -65,6 +56,14 @@ def check_redis() -> Tuple[bool, str]:
     Returns:
         Tuple[bool, str]: (حالة الصحة, رسالة)
     """
+    from flask import current_app
+    from config_factory import get_config
+    
+    try:
+        config = get_config()
+    except Exception:
+        return True, "Redis check skipped (no config)"
+    
     if not config:
         return True, "Redis check skipped (no config)"
     
@@ -135,6 +134,8 @@ def metrics():
     """
     Prometheus Metrics - إحصائيات ومقاييس التطبيق
     """
+    from flask import current_app
+    
     metrics_data = {
         'uptime_seconds': get_uptime(),
         'timestamp': datetime.utcnow().isoformat(),
@@ -145,6 +146,7 @@ def metrics():
         }
     }
     
+    db_pool = current_app.config.get('DB_POOL')
     if db_pool and hasattr(db_pool, 'stats'):
         db_stats = db_pool.stats.get_stats()
         metrics_data['database'] = {
@@ -166,11 +168,15 @@ def metrics():
     return jsonify(metrics_data), 200
 
 
-def register_health_routes(app):
+def register_health_routes(app, db_pool=None):
     """
     تسجيل health routes مع Flask app
     
     Args:
         app: Flask application instance
+        db_pool: DatabaseConnectionPool instance (optional)
     """
+    if db_pool:
+        app.config['DB_POOL'] = db_pool
+    
     app.register_blueprint(health_bp)
