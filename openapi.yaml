@@ -1,0 +1,364 @@
+openapi: 3.0.3
+info:
+  title: aaPanel API
+  description: |
+    # aaPanel REST API Documentation
+    
+    aaPanel is a powerful server management control panel providing comprehensive server administration capabilities through a web interface and RESTful API.
+    
+    ## Current Implementation Status
+    
+    This OpenAPI specification documents the **currently implemented** health monitoring endpoints.
+    
+    ### Available Features
+    - ✅ **Health & Monitoring**: Real-time health checks and system metrics
+    - ✅ **Liveness Probe**: `/health/live` - Application availability check
+    - ✅ **Readiness Probe**: `/health/ready` - Database and Redis connectivity check
+    - ✅ **Metrics Endpoint**: `/health/metrics` - Prometheus-compatible metrics
+    
+    ### Future Endpoints
+    Additional endpoints for authentication, system management, database operations, 
+    and file management are planned for future releases and will be documented here as they are implemented.
+    
+    ## Response Format
+    All responses are in JSON format with consistent structure:
+    ```json
+    {
+      "status": "alive|ready|not_ready",
+      "timestamp": "2025-10-02T12:00:00.000000",
+      "uptime_seconds": 3600.5
+    }
+    ```
+    
+    ## Usage with Kubernetes
+    These health endpoints are designed to work seamlessly with Kubernetes:
+    - Use `/health/live` for livenessProbe
+    - Use `/health/ready` for readinessProbe
+    - Use `/health/metrics` for Prometheus scraping
+    
+  version: 1.0.0
+  contact:
+    name: aaPanel Support
+    url: https://www.aapanel.com
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: http://localhost:5000
+    description: Development server (Replit)
+  - url: https://{domain}
+    description: Production server
+    variables:
+      domain:
+        default: example.com
+        description: Your production domain
+
+tags:
+  - name: Health
+    description: Health check and monitoring endpoints (Currently Implemented)
+
+paths:
+  /health/live:
+    get:
+      tags:
+        - Health
+      summary: Liveness probe
+      description: |
+        Checks if the application is alive and running.
+        Always returns 200 OK if the application process is active.
+        Used by Kubernetes and monitoring systems for liveness checks.
+        
+        **Implementation**: Defined in `health_endpoints.py`
+      operationId: getLiveness
+      responses:
+        '200':
+          description: Application is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - status
+                  - timestamp
+                  - uptime_seconds
+                properties:
+                  status:
+                    type: string
+                    enum: [alive]
+                    description: Always returns "alive"
+                    example: alive
+                  timestamp:
+                    type: string
+                    format: date-time
+                    description: ISO 8601 formatted UTC timestamp
+                    example: "2025-10-02T12:00:00.000000"
+                  uptime_seconds:
+                    type: number
+                    format: float
+                    description: Application uptime in seconds since start
+                    example: 3600.5
+              examples:
+                success:
+                  summary: Successful response
+                  value:
+                    status: alive
+                    timestamp: "2025-10-02T12:00:00.000000"
+                    uptime_seconds: 3600.5
+
+  /health/ready:
+    get:
+      tags:
+        - Health
+      summary: Readiness probe
+      description: |
+        Checks if the application is ready to accept traffic.
+        Validates database and Redis connectivity before returning success.
+        Returns 200 if ready, 503 if not ready.
+        Used by Kubernetes and load balancers for readiness checks.
+        
+        **Implementation**: Defined in `health_endpoints.py`
+        
+        **Checks performed**:
+        - Database connection (via db_pool.health_check())
+        - Redis connection (if configured)
+      operationId: getReadiness
+      responses:
+        '200':
+          description: Application is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+              examples:
+                ready:
+                  summary: All systems healthy
+                  value:
+                    status: ready
+                    timestamp: "2025-10-02T12:00:00.000000"
+                    uptime_seconds: 3600.5
+                    checks:
+                      database:
+                        status: healthy
+                        message: Database connected
+                      redis:
+                        status: healthy
+                        message: Redis connected
+        '503':
+          description: Application is not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+              examples:
+                database_down:
+                  summary: Database connection failed
+                  value:
+                    status: not_ready
+                    timestamp: "2025-10-02T12:00:00.000000"
+                    uptime_seconds: 3600.5
+                    checks:
+                      database:
+                        status: unhealthy
+                        message: Database connection failed
+                      redis:
+                        status: healthy
+                        message: Redis connected
+                redis_down:
+                  summary: Redis connection failed
+                  value:
+                    status: not_ready
+                    timestamp: "2025-10-02T12:00:00.000000"
+                    uptime_seconds: 3600.5
+                    checks:
+                      database:
+                        status: healthy
+                        message: Database connected
+                      redis:
+                        status: unhealthy
+                        message: "Redis error: Connection refused"
+
+  /health/metrics:
+    get:
+      tags:
+        - Health
+      summary: Prometheus metrics
+      description: |
+        Returns application and system metrics in JSON format.
+        Compatible with Prometheus monitoring through json_exporter or custom scrapers.
+        
+        **Implementation**: Defined in `health_endpoints.py`
+        
+        **Metrics included**:
+        - System metrics (CPU, Memory, Disk usage via psutil)
+        - Database statistics (connections, queries, success rate)
+        - Redis status
+        - Application uptime
+      operationId: getMetrics
+      responses:
+        '200':
+          description: Metrics data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsResponse'
+              examples:
+                full_metrics:
+                  summary: Complete metrics with database stats
+                  value:
+                    uptime_seconds: 3600.5
+                    timestamp: "2025-10-02T12:00:00.000000"
+                    system:
+                      cpu_percent: 25.5
+                      memory_percent: 45.2
+                      disk_percent: 68.7
+                    database:
+                      connections_created: 150
+                      connections_closed: 145
+                      total_queries: 5000
+                      failed_queries: 5
+                      success_rate: 99.9
+                      status: up
+                    redis:
+                      status: up
+                minimal_metrics:
+                  summary: Metrics without database (db_pool not available)
+                  value:
+                    uptime_seconds: 1200.0
+                    timestamp: "2025-10-02T12:20:00.000000"
+                    system:
+                      cpu_percent: 15.2
+                      memory_percent: 38.5
+                      disk_percent: 55.3
+                    redis:
+                      status: down
+
+components:
+  schemas:
+    ReadinessResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+        - uptime_seconds
+        - checks
+      properties:
+        status:
+          type: string
+          enum: [ready, not_ready]
+          description: Overall readiness status
+        timestamp:
+          type: string
+          format: date-time
+          description: ISO 8601 formatted UTC timestamp
+        uptime_seconds:
+          type: number
+          format: float
+          description: Application uptime in seconds
+        checks:
+          type: object
+          description: Individual component health checks
+          required:
+            - database
+            - redis
+          properties:
+            database:
+              $ref: '#/components/schemas/HealthCheck'
+            redis:
+              $ref: '#/components/schemas/HealthCheck'
+
+    HealthCheck:
+      type: object
+      required:
+        - status
+        - message
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+          description: Health status of the component
+        message:
+          type: string
+          description: Human-readable status message
+          example: "Database connected"
+
+    MetricsResponse:
+      type: object
+      required:
+        - uptime_seconds
+        - timestamp
+        - system
+        - redis
+      properties:
+        uptime_seconds:
+          type: number
+          format: float
+          description: Application uptime in seconds
+        timestamp:
+          type: string
+          format: date-time
+          description: ISO 8601 formatted UTC timestamp
+        system:
+          type: object
+          required:
+            - cpu_percent
+            - memory_percent
+            - disk_percent
+          properties:
+            cpu_percent:
+              type: number
+              format: float
+              description: CPU usage percentage (0-100)
+              minimum: 0
+              maximum: 100
+            memory_percent:
+              type: number
+              format: float
+              description: Memory usage percentage (0-100)
+              minimum: 0
+              maximum: 100
+            disk_percent:
+              type: number
+              format: float
+              description: Disk usage percentage (0-100)
+              minimum: 0
+              maximum: 100
+        database:
+          type: object
+          description: Database statistics (only present if db_pool is available)
+          properties:
+            connections_created:
+              type: integer
+              description: Total number of database connections created
+              minimum: 0
+            connections_closed:
+              type: integer
+              description: Total number of database connections closed
+              minimum: 0
+            total_queries:
+              type: integer
+              description: Total number of queries executed
+              minimum: 0
+            failed_queries:
+              type: integer
+              description: Total number of failed queries
+              minimum: 0
+            success_rate:
+              type: number
+              format: float
+              description: Query success rate percentage
+              minimum: 0
+              maximum: 100
+            status:
+              type: string
+              enum: [up, down]
+              description: Database connection status
+        redis:
+          type: object
+          required:
+            - status
+          properties:
+            status:
+              type: string
+              enum: [up, down]
+              description: Redis connection status
